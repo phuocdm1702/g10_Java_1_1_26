@@ -48,7 +48,7 @@ public class SanPhamChiTiet {
     private Integer soLuong;
 
     @Column(name = "anh_url")
-    private String anhUrl;
+    private String anhUrl = "/images/products/default-placeholder.png";
 
     @Column(name = "trang_thai")
     private Boolean trangThai;

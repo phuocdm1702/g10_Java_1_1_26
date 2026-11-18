@@ -23,23 +23,23 @@ public class SanPham {
     private ThuongHieu thuongHieu;
 
     @Column(name = "mo_ta")
-    private String moTa;
+    private String moTa = "";
 
     @Column(name = "trang_thai")
-    private Boolean trangThai;
+    private Boolean trangThai = true;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_danh_muc", referencedColumnName = "id")
     private DanhMuc danhMuc;
 
-    @Column(name = " doi_tuong")
-    private String doiTuong;
+    @Column(name = "doi_tuong")
+    private String doiTuong = "Nam";
 
     @Column(name = "mua")
-    private String mua;
+    private String mua = "Cả năm";
 
     @Column(name = "kieu_dang")
-    private String kieuDang;
+    private String kieuDang = "Regular";
 
     @Column(name ="kieu_co")
     private String kieuCo;

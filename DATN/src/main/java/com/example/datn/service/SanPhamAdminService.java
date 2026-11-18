@@ -22,6 +22,7 @@ public class SanPhamAdminService {
     private final KichThuocRepository sizeRepo;
     private final ChatLieuRepository clRepo;
     private final ThuongHieuRepository thRepo;
+    private final jakarta.persistence.EntityManager em;
 
     @Transactional(readOnly = true)
     public List<SanPhamAdminResponse> getAll() {
@@ -120,8 +121,14 @@ public class SanPhamAdminService {
     private void applyProduct(SanPham sp, SanPhamRequest r) {
         sp.setMaAo(r.maAo().trim());
         sp.setTenAo(r.tenAo().trim());
-        sp.setMoTa(r.moTa());
+        sp.setMoTa(r.moTa() != null ? r.moTa() : "");
         sp.setTrangThai(r.trangThai() != null ? r.trangThai() : true);
+        if (sp.getDoiTuong() == null || sp.getDoiTuong().isBlank()) sp.setDoiTuong("Nam");
+        if (sp.getMua() == null || sp.getMua().isBlank()) sp.setMua("Cả năm");
+        if (sp.getKieuDang() == null || sp.getKieuDang().isBlank()) sp.setKieuDang("Regular");
+        if (sp.getDanhMuc() == null) {
+            sp.setDanhMuc(em.getReference(DanhMuc.class, 1));
+        }
         if (r.idThuongHieu() != null) {
             sp.setThuongHieu(thRepo.findById(r.idThuongHieu())
                     .orElseThrow(() -> new RuntimeException("Thương hiệu không tồn tại")));
