@@ -13,6 +13,7 @@ const { Sider, Header, Content } = Layout
 
 const ALL_ITEMS = [
     { key: '/admin/thong-ke', icon: <BarChartOutlined />, label: 'Thống kê' },
+    { key: '/admin/ban-hang-offline', icon: <BarChartOutlined />, label: 'Bán hàng offline' },
     { key: '/admin/hoa-don', icon: <FileTextOutlined />, label: 'Quản lý hóa đơn' },
     { key: '/admin/san-pham', icon: <ShoppingOutlined />, label: 'Quản lý sản phẩm' },
     {
