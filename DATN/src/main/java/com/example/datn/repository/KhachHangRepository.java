@@ -12,6 +12,7 @@ import java.util.List;
 public interface KhachHangRepository extends JpaRepository<KhachHang, Integer> {
 
     List<KhachHang> findAllByOrderByIdDesc();
+    List<KhachHang> findAllByTrangThaiTrueOrderByIdDesc();
 
     boolean existsBySoDienThoaiAndIdNot(String soDienThoai, Integer id);
     boolean existsByEmailIgnoreCaseAndIdNot(String email, Integer id);

@@ -3,6 +3,7 @@ const BOSS = ['ADMIN', 'MANAGER']
 
 export const ACCESS = {
     '/admin/thong-ke': BOSS,
+    '/admin/ban-hang-offline': ['ADMIN', 'MANAGER', 'SALES'],
     '/admin/hoa-don': ['ADMIN', 'MANAGER', 'SALES'],
     '/admin/san-pham': PRODUCT,
     '/admin/mau-sac': PRODUCT,

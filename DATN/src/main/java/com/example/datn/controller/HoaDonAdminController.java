@@ -1,6 +1,8 @@
 package com.example.datn.controller;
 import com.example.datn.dto.CapNhatThongTinHoaDonRequest;
 import com.example.datn.dto.CapNhatTrangThaiHoaDonRequest;
+import com.example.datn.dto.BaoGiaRequest;
+import com.example.datn.dto.PosCheckoutRequest;
 import com.example.datn.dto.HoaDonResponse;
 import com.example.datn.service.HoaDonAdminService;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +19,31 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class HoaDonAdminController {
     private final HoaDonAdminService hoaDonAdminService;
+
+    @PostMapping("/tai-quay/bao-gia")
+    public ResponseEntity<?> quoteAtCounter(@RequestBody @jakarta.validation.Valid BaoGiaRequest req) {
+        try {
+            return ResponseEntity.ok(hoaDonAdminService.quoteAtCounter(req));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/tai-quay/khach-hang")
+    public ResponseEntity<?> getCounterCustomers() {
+        return ResponseEntity.ok(hoaDonAdminService.getCounterCustomers());
+    }
+
+    @PostMapping("/tai-quay")
+    public ResponseEntity<?> checkoutAtCounter(
+            @org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.oauth2.jwt.Jwt jwt,
+            @RequestBody @jakarta.validation.Valid PosCheckoutRequest req) {
+        try {
+            return ResponseEntity.ok(hoaDonAdminService.checkoutAtCounter(Integer.valueOf(jwt.getSubject()), req));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
 
     @GetMapping
     public ResponseEntity<List<HoaDonResponse>> searchOrders(
