@@ -78,6 +78,7 @@ public class AuthService {
         k.setEmail(email);
         k.setMatKhau(encoder.encode(r.matKhau()));
         k.setTrangThai(true);
+        k.setGioiTinh("Khác");
         khRepo.save(k);
         return customerResponse(k);       // đăng ký xong đăng nhập luôn
     }
