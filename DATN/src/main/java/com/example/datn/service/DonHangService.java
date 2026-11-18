@@ -79,7 +79,7 @@ public class DonHangService {
         hd.setPhiGiaoHang(t.ship());
         hd.setTongTien(t.tong());
         hd.setHinhThucMuaHang("Online");
-        hd.setGhiChu(r.ghiChu() == null || r.ghiChu().isBlank() ? null : r.ghiChu().trim());
+        hd.setGhiChu(r.ghiChu() == null || r.ghiChu().isBlank() ? "" : r.ghiChu().trim());
         hd.setTrangThai("Chờ xác nhận");
         hdRepo.save(hd);
 
