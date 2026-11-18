@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Card, Form, Input, Select, Button, Table, InputNumber, Space, Switch, Row, Col, Spin, Alert, App } from 'antd'
-import AnhSanPham from '../../components/admin/AnhSanPham'
+import { Card, Form, Input, Select, Button, Table, InputNumber, Space, Switch, Row, Col, Spin, App } from 'antd'
+import AnhSanPham, { groupKeyOf } from '../../components/admin/AnhSanPham'
 import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons'
 import api from '../../api/axios'
 
@@ -31,6 +31,12 @@ export default function SanPhamForm() {
     const [sizeIds, setSizeIds] = useState([])
     const [variants, setVariants] = useState({})   // key "idMau-idKichThuoc" -> biến thể
     const [bulk, setBulk] = useState({ giaBanBanDau: null, giaBan: null, soLuong: null })
+
+    // Trạng thái ảnh tạm trên FE (chỉ áp dụng thật lên Cloud/DB khi bấm "Lưu sản phẩm")
+    const [pendingFiles, setPendingFiles] = useState([])
+    const [pendingDeletes, setPendingDeletes] = useState([])
+    const [pendingPrimaries, setPendingPrimaries] = useState({})
+
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
 
@@ -57,7 +63,7 @@ export default function SanPhamForm() {
             }
         }
         init()
-    }, [id])
+    }, [id, isEdit, form, message])
 
     // Chọn màu / size -> sinh lại bảng biến thể, giữ nguyên dòng đã nhập
     const rebuild = (cIds, sIds) => {
@@ -114,14 +120,73 @@ export default function SanPhamForm() {
         }
         setSaving(true)
         try {
+            let targetId = id
             if (isEdit) {
                 await api.put(`/admin/san-pham/${id}`, body)
+            } else {
+                const { data } = await api.post('/admin/san-pham', body)
+                targetId = data.id
+            }
+
+            // 1. Xóa thật các ảnh đã đánh dấu xóa tạm khi bấm "Lưu sản phẩm"
+            for (const delId of pendingDeletes) {
+                try {
+                    await api.delete(`/admin/anh/${delId}`)
+                } catch (err) {
+                    message.error(err.response?.data?.message ?? `Không xóa được ảnh #${delId}`)
+                }
+            }
+            setPendingDeletes([])
+
+            // 2. Đẩy các ảnh đang xem trước tạm trên FE lên Cloudinary
+            const uploadedIdByUid = {}
+            if (pendingFiles.length > 0 && targetId) {
+                const failed = []
+                for (const item of pendingFiles) {
+                    const fd = new FormData()
+                    fd.append('file', item.file)
+                    if (item.idMau != null) fd.append('idMau', item.idMau)
+                    try {
+                        const res = await api.post(`/admin/san-pham/${targetId}/anh`, fd)
+                        if (res.data?.id) uploadedIdByUid[item.uid] = res.data.id
+                        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
+                    } catch (err) {
+                        failed.push(item)
+                        message.error(err.response?.data?.message ?? 'Tải ảnh lên Cloud thất bại')
+                    }
+                }
+                setPendingFiles(failed)
+                if (failed.length > 0) {
+                    if (!isEdit) navigate(`/admin/san-pham/${targetId}`)
+                    return
+                }
+            }
+
+            // 3. Áp dụng ảnh chính nếu người dùng có đổi ảnh chính tạm trên FE
+            for (const chosenKey of Object.values(pendingPrimaries)) {
+                let realAnhId = null
+                if (chosenKey.startsWith('saved-')) {
+                    const parsed = Number(chosenKey.slice('saved-'.length))
+                    if (!pendingDeletes.includes(parsed)) realAnhId = parsed
+                } else if (uploadedIdByUid[chosenKey]) {
+                    realAnhId = uploadedIdByUid[chosenKey]
+                }
+                if (realAnhId) {
+                    try {
+                        await api.put(`/admin/anh/${realAnhId}/chinh`)
+                    } catch {
+                        // Bỏ qua nếu không đặt được ảnh chính
+                    }
+                }
+            }
+            setPendingPrimaries({})
+
+            if (isEdit) {
                 message.success('Cập nhật sản phẩm thành công')
                 navigate('/admin/san-pham')
             } else {
-                const { data } = await api.post('/admin/san-pham', body)
-                message.success('Đã tạo sản phẩm. Hãy thêm ảnh cho từng màu.')
-                navigate(`/admin/san-pham/${data.id}`)
+                message.success('Đã tạo sản phẩm và lưu hình ảnh thành công')
+                navigate(`/admin/san-pham/${targetId}`)
             }
         } catch (e) {
             message.error(e.response?.data?.message ?? 'Có lỗi xảy ra')
@@ -232,12 +297,18 @@ export default function SanPhamForm() {
                            rowKey={v => keyOf(v.idMau, v.idKichThuoc)} scroll={{ x: 800 }}
                            locale={{ emptyText: 'Chọn màu và kích thước để tạo biến thể' }} />
                 </Card>
-                {isEdit
-                    ? <AnhSanPham idAo={id} colors={colorIds.map(colorOf).filter(Boolean)} />
-                    : <Card title="Hình ảnh theo màu">
-                        <Alert type="info" showIcon
-                               message="Lưu sản phẩm trước, hệ thống sẽ chuyển sang trang sửa để bạn thêm ảnh theo từng màu." />
-                    </Card>}
+
+                <AnhSanPham
+                    idAo={isEdit ? id : null}
+                    colors={colorIds.map(colorOf).filter(Boolean)}
+                    pendingFiles={pendingFiles}
+                    setPendingFiles={setPendingFiles}
+                    pendingDeletes={pendingDeletes}
+                    setPendingDeletes={setPendingDeletes}
+                    pendingPrimaries={pendingPrimaries}
+                    setPendingPrimaries={setPendingPrimaries}
+                />
+
                 <div style={{ textAlign: 'right' }}>
                     <Space>
                         <Button onClick={() => navigate('/admin/san-pham')}>Hủy</Button>

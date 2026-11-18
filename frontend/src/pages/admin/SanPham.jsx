@@ -103,9 +103,9 @@ export default function SanPham() {
                         <Switch size="small" checked={!!record.trangThai} loading={updatingId === record.id}
                                 disabled={updatingId !== null} onChange={checked => toggle(record, checked)} />
                     </Tooltip>
-                    <Tooltip title="Xem sản phẩm (chỉ đọc)">
+                    <Tooltip title="Xem / Sửa sản phẩm & Hình ảnh">
                         <Button className="sp-eye" type="text" size="small" icon={<EyeOutlined />}
-                                onClick={() => navigate(`/admin/san-pham/${record.id}/xem`)} aria-label={`Xem sản phẩm ${record.maAo}`} />
+                                onClick={() => navigate(`/admin/san-pham/${record.id}`)} aria-label={`Xem sản phẩm ${record.maAo}`} />
                     </Tooltip>
                 </Space>
             ) },
