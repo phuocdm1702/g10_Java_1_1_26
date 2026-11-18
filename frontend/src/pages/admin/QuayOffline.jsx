@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
     App, Button, Checkbox, Empty, Input, InputNumber, Modal, Radio,
-    Select, Space, Divider, Statistic
+    Select, Divider, Tag
 } from 'antd'
 import {
-    SearchOutlined, MinusOutlined,
-    PlusOutlined, DeleteOutlined, DollarOutlined, CreditCardOutlined
+    SearchOutlined, MinusOutlined, PlusOutlined, DeleteOutlined,
+    DollarOutlined, CreditCardOutlined, ShoppingOutlined, CloseOutlined
 } from '@ant-design/icons'
 import api from '../../api/axios'
 import { fetchProducts } from '../../api/storeApi'
@@ -14,11 +14,25 @@ import ProductImage from '../../components/user/ProductImage'
 import PosProductCard from '../../components/admin/PosProductCard'
 
 const styles = `
-.pos { height: calc(100vh - 128px); display: grid; grid-template-columns: minmax(0, 1.8fr) 380px; gap: 16px; }
-.pos-left, .pos-cart { background: #fff; border: 1px solid #edf0f4; border-radius: 10px; min-height: 0; }
-.pos-left { display: flex; flex-direction: column; padding: 18px; }
-.pos-tools { display: grid; grid-template-columns: minmax(240px, 1fr) 180px; gap: 12px; margin-bottom: 16px; }
-.pos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; overflow: auto; padding: 0 4px 4px 0; }
+.pos { height: calc(100vh - 145px); min-height: 560px; display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; }
+.pos-left { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.pos-pending, .pos-cart, .pos-payment { background: #fff; border: 1px solid #edf0f4; border-radius: 9px; min-height: 0; }
+.pos-pending { flex: 0 0 132px; padding: 12px 16px; overflow: hidden; }
+.pos-pending-head, .pos-cart-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pos-pending-list { display: flex; gap: 10px; overflow-x: auto; padding: 10px 2px 6px; }
+.pos-pending-card { position: relative; flex: 0 0 132px; min-height: 72px; border: 1px solid #e1e4e9; border-radius: 7px; padding: 8px; text-align: left; background: #fff; cursor: pointer; }
+.pos-pending-card.active { border-color: #1f2a44; box-shadow: 0 0 0 1px #1f2a44; }
+.pos-pending-code { font-weight: 700; }
+.pos-pending-card .ant-tag { margin: 4px 0 0; line-height: 18px; }
+.pos-pending-count { color: #667085; font-size: 11px; }
+.pos-pending-remove { position: absolute; top: 4px; right: 4px; }
+.pos-cart { display: flex; flex-direction: column; flex: 1; }
+.pos-cart-head { padding: 12px 16px; border-bottom: 1px solid #edf0f4; }
+.pos-cart-toolbar { display: flex; gap: 8px; }
+.pos-lines { flex: 1; overflow: auto; padding: 10px 16px; }
+.pos-empty { display: grid; place-content: center; height: 100%; }
+.pos-picker-tools { display: grid; grid-template-columns: minmax(230px, 1.5fr) repeat(4, minmax(120px, 1fr)) auto; gap: 8px; margin: 10px 0 14px; }
+.pos-picker-grid { max-height: min(65vh, 680px); overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; padding: 2px 4px 8px 2px; }
 .pos-product { height: 100%; border: 1px solid #edf0f4; border-radius: 9px; padding: 10px; background: #fff; }
 .pos-product .ant-card-body { padding: 0; display: flex; flex-direction: column; height: 100%; }
 .pos-thumb { aspect-ratio: 3 / 4; border-radius: 7px; background: #f5f6f8; display: grid; place-items: center; overflow: hidden; }
@@ -37,9 +51,6 @@ const styles = `
 .pos-price { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin: 0 0 6px; font-weight: 600; color: #172033; }
 .pos-price s { color: #98a2b3; font-size: 12px; font-weight: 400; }
 .pos-add { margin-top: 1px; }
-.pos-cart { display: flex; flex-direction: column; }
-.pos-cart-head { padding: 16px 18px 12px; border-bottom: 1px solid #edf0f4; }
-.pos-lines { flex: 1; overflow: auto; padding: 10px 18px; }
 .pos-line { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 9px; align-items: center; padding: 9px 0; border-bottom: 1px solid #f1f2f4; }
 .pos-line-image, .pos-line-image img, .pos-line-image .photo { width: 44px; height: 44px; }
 .pos-line-image img, .pos-line-image .photo { object-fit: cover; border-radius: 6px; background: #f5f6f8; }
@@ -47,26 +58,30 @@ const styles = `
 .pos-line-meta { color: #667085; font-size: 12px; margin-top: 2px; }
 .pos-line-actions { display: flex; align-items: center; gap: 5px; margin-top: 6px; }
 .pos-line-actions .ant-input-number { width: 58px; }
-.pos-total { border-top: 1px solid #edf0f4; padding: 14px 18px 18px; }
+.pos-payment { display: flex; flex-direction: column; overflow: auto; }
+.pos-payment-head { padding: 14px 16px; border-bottom: 1px solid #edf0f4; font-weight: 700; }
+.pos-payment-body { padding: 14px; }
+.pos-customer-mode { margin-bottom: 12px; }
+.pos-total { padding: 12px; border: 1px solid #edf0f4; border-radius: 8px; margin: 12px 0; }
 .pos-voucher { margin-bottom: 12px; }
 .pos-voucher-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
 .pos-voucher-state { margin-top: 6px; font-size: 12px; color: #667085; }
 .pos-breakdown { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 8px; color: #667085; }
 .pos-breakdown.discount { color: #b42318; }
-.pos-qr-panel { margin-top: 14px; padding: 16px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fafbfc; text-align: center; }
-.pos-qr-panel img { display: block; width: 220px; height: 220px; max-width: 100%; margin: 12px auto; object-fit: contain; background: white; }
-.pos-qr-title { font-weight: 700; color: #172033; }
-.pos-qr-detail { color: #667085; font-size: 13px; line-height: 1.6; }
-.pos-qr-amount { font-size: 20px; font-weight: 700; color: #1f2a44; }
-.pos-qr-note { display: inline-block; padding: 4px 8px; border-radius: 5px; background: #eef1f6; color: #1f2a44; font-weight: 600; }
+.pos-qr-panel { margin: 12px auto 0; text-align: center; }
+.pos-qr-panel img { display: block; width: 190px; height: 190px; max-width: 100%; margin: 0 auto; object-fit: contain; background: white; }
 .pos-qr-confirm { display: block; margin-top: 12px; text-align: left; }
 .pos-qr-warning { margin-top: 8px; color: #ad6800; font-size: 12px; text-align: left; }
 .pos-total-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
 .pos-total-row strong { font-size: 22px; color: #1f2a44; }
-.pos-customer { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-@media (max-width: 1050px) { .pos { grid-template-columns: 1fr 330px; } }
-@media (max-width: 800px) { .pos { height: auto; grid-template-columns: 1fr; } .pos-grid { max-height: 520px; } .pos-cart { min-height: 420px; } }
-@media (max-width: 560px) { .pos-tools, .pos-customer { grid-template-columns: 1fr; } .pos-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.pos-customer { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.pos-payment-method { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+.pos-payment-method .ant-radio-button-wrapper { text-align: center; padding-inline: 8px; }
+.pos-cash-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+.pos-checkout { margin-top: 12px; }
+@media (max-width: 1050px) { .pos { grid-template-columns: minmax(0, 1fr) 310px; } .pos-picker-tools { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 800px) { .pos { height: auto; min-height: 0; grid-template-columns: 1fr; } .pos-left { min-height: 620px; } .pos-cart { min-height: 340px; } .pos-payment { overflow: visible; } }
+@media (max-width: 560px) { .pos-picker-tools { grid-template-columns: 1fr 1fr; } .pos-picker-tools .pos-search { grid-column: 1 / -1; } .pos-picker-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pos-pending { flex-basis: 120px; } .pos-cash-inputs { grid-template-columns: 1fr; } }
 `
 
 const normalize = value => String(value ?? '').normalize('NFD')
@@ -85,8 +100,14 @@ export default function QuayOffline() {
     const [loading, setLoading] = useState(false)
     const [search, setSearch] = useState('')
     const [brand, setBrand] = useState('all')
+    const [material, setMaterial] = useState('all')
+    const [colorFilter, setColorFilter] = useState('all')
+    const [sizeFilter, setSizeFilter] = useState('all')
+    const [productPickerOpen, setProductPickerOpen] = useState(false)
     const [cart, setCart] = useState([])
-    const [checkoutOpen, setCheckoutOpen] = useState(false)
+    const [pendingOrders, setPendingOrders] = useState([{ id: 1, code: 'HD001', cart: [] }])
+    const [activeOrderId, setActiveOrderId] = useState(1)
+    const [nextOrderNumber, setNextOrderNumber] = useState(2)
     const [customerType, setCustomerType] = useState('guest')
     const [customers, setCustomers] = useState([])
     const [selectedCustomerId, setSelectedCustomerId] = useState(null)
@@ -135,18 +156,96 @@ export default function QuayOffline() {
         [...new Set(products.map(p => p.thuongHieu).filter(Boolean))]
             .sort((a, b) => a.localeCompare(b, 'vi')), [products])
 
+    const materials = useMemo(() =>
+        [...new Set(products.map(p => p.chatLieu).filter(Boolean))]
+            .sort((a, b) => a.localeCompare(b, 'vi')), [products])
+    const colors = useMemo(() =>
+        [...new Set(products.flatMap(p => (p.bienThe ?? []).map(v => v.mau?.ten).filter(Boolean)))]
+            .sort((a, b) => a.localeCompare(b, 'vi')), [products])
+    const sizes = useMemo(() =>
+        [...new Set(products.flatMap(p => (p.bienThe ?? []).map(v => v.size).filter(Boolean)))]
+            .sort((a, b) => a.localeCompare(b, 'vi')), [products])
+
     const filtered = useMemo(() => products.filter(p => {
-        const text = normalize(`${p.ten ?? ''} ${p.bienThe?.map(v => v.size).join(' ') ?? ''}`)
+        const variants = p.bienThe ?? []
+        const text = normalize(`${p.ten ?? ''} ${variants.map(v => `${v.size ?? ''} ${v.mau?.ten ?? ''}`).join(' ')}`)
         return text.includes(normalize(search.trim()))
             && (brand === 'all' || p.thuongHieu === brand)
-    }), [products, search, brand])
+            && (material === 'all' || p.chatLieu === material)
+            && (colorFilter === 'all' || variants.some(v => v.mau?.ten === colorFilter))
+            && (sizeFilter === 'all' || variants.some(v => v.size === sizeFilter))
+    }), [products, search, brand, material, colorFilter, sizeFilter])
+
+    const setActiveCart = nextCart => {
+        const resolved = typeof nextCart === 'function' ? nextCart(cart) : nextCart
+        setCart(resolved)
+        setPendingOrders(current => current.map(order =>
+            order.id === activeOrderId ? { ...order, cart: resolved } : order))
+    }
+
+    const resetOrderFields = () => {
+        setCustomerType('guest')
+        setSelectedCustomerId(null)
+        setCustomerName('')
+        setCustomerPhone('')
+        setPayment('Tiền mặt')
+        setReceived(undefined)
+        setTransferConfirmed(false)
+        setNote('')
+        setVoucherInput('')
+        setAppliedVoucher('')
+        setVoucherQuote(null)
+        setVoucherCartKey('')
+    }
+
+    const addPendingOrder = () => {
+        const id = nextOrderNumber
+        setPendingOrders(current => [...current, {
+            id, code: `HD${String(id).padStart(3, '0')}`, cart: [],
+        }])
+        setNextOrderNumber(id + 1)
+        setActiveOrderId(id)
+        setCart([])
+        setTransferReference(`POS${Date.now()}`)
+        resetOrderFields()
+    }
+
+    const switchPendingOrder = order => {
+        if (order.id === activeOrderId) return
+        setActiveOrderId(order.id)
+        setCart(order.cart)
+        setTransferReference(`POS${Date.now()}`)
+        resetOrderFields()
+    }
+
+    const closePendingOrder = orderId => {
+        if (pendingOrders.length === 1) {
+            const id = nextOrderNumber
+            setPendingOrders([{ id, code: `HD${String(id).padStart(3, '0')}`, cart: [] }])
+            setNextOrderNumber(id + 1)
+            setActiveOrderId(id)
+            setCart([])
+            setTransferReference(`POS${Date.now()}`)
+            resetOrderFields()
+            return
+        }
+        const remaining = pendingOrders.filter(order => order.id !== orderId)
+        setPendingOrders(remaining)
+        if (orderId === activeOrderId) {
+            const next = remaining[0]
+            setActiveOrderId(next.id)
+            setCart(next.cart)
+            setTransferReference(`POS${Date.now()}`)
+            resetOrderFields()
+        }
+    }
 
     const addVariant = (product, variant) => {
         if (!variant || Number(variant.soLuong ?? 0) <= 0) {
             message.warning('Biến thể này đã hết hàng')
             return
         }
-        setCart(current => {
+        setActiveCart(current => {
             const found = current.find(x => x.variant.id === variant.id)
             if (found) {
                 if (found.quantity >= variant.soLuong) {
@@ -161,7 +260,7 @@ export default function QuayOffline() {
     }
 
     const setQuantity = (variantId, quantity) => {
-        setCart(current => current.map(line => {
+        setActiveCart(current => current.map(line => {
             if (line.variant.id !== variantId) return line
             const next = Math.max(1, Math.min(quantity || 1, line.variant.soLuong))
             return { ...line, quantity: next }
@@ -169,7 +268,7 @@ export default function QuayOffline() {
     }
 
     const removeLine = variantId =>
-        setCart(current => current.filter(line => line.variant.id !== variantId))
+        setActiveCart(current => current.filter(line => line.variant.id !== variantId))
 
     const cartItems = useMemo(() => cart.map(line => ({
         idBienThe: line.variant.id,
@@ -240,12 +339,6 @@ export default function QuayOffline() {
         return url.toString()
     }, [qrConfigured, total, transferReference])
 
-    const openCheckout = () => {
-        setTransferReference(`POS${Date.now()}`)
-        setTransferConfirmed(false)
-        setCheckoutOpen(true)
-    }
-
     const submitCheckout = async () => {
         if (!cart.length) {
             message.warning('Chưa có sản phẩm trong đơn')
@@ -289,16 +382,17 @@ export default function QuayOffline() {
                 items: cartItems,
             })
             message.success(`Đã tạo hóa đơn ${data.maHoaDon}`)
+            const nextId = nextOrderNumber
+            const remainingOrders = pendingOrders.filter(order => order.id !== activeOrderId)
+            setPendingOrders([...remainingOrders, {
+                id: nextId, code: `HD${String(nextId).padStart(3, '0')}`, cart: [],
+            }])
+            setNextOrderNumber(nextId + 1)
+            setActiveOrderId(nextId)
             setCart([])
-            setCustomerName('')
-            setCustomerPhone('')
-            setCustomerType('guest')
-            setSelectedCustomerId(null)
-            setReceived(undefined)
-            setTransferConfirmed(false)
-            setNote('')
-            removeVoucher()
-            setCheckoutOpen(false)
+            setProductPickerOpen(false)
+            resetOrderFields()
+            setTransferReference(`POS${Date.now()}`)
             load()
         } catch (error) {
             message.error(error.response?.data?.message || 'Không thể thanh toán')
@@ -311,140 +405,118 @@ export default function QuayOffline() {
         <div className="pos">
             <style>{styles}</style>
             <section className="pos-left">
-                <div className="pos-tools">
-                    <Input allowClear size="large" prefix={<SearchOutlined />} value={search}
-                           onChange={e => setSearch(e.target.value)}
-                           placeholder="Tìm theo tên sản phẩm, màu, kích thước..." />
-                    <Select size="large" value={brand} onChange={setBrand}
-                            options={[{ value: 'all', label: 'Tất cả thương hiệu' },
-                                ...brands.map(x => ({ value: x, label: x }))]} />
-                </div>
-                {loading ? <div style={{ padding: 40, textAlign: 'center' }}>Đang tải sản phẩm...</div>
-                    : filtered.length === 0 ? <Empty description="Không tìm thấy sản phẩm" />
-                        : <div className="pos-grid">
-                            {filtered.map(product => <PosProductCard
-                                key={product.id}
-                                product={product}
-                                onAddVariant={addVariant}
-                            />)}
-                        </div>}
+                <section className="pos-pending">
+                    <div className="pos-pending-head">
+                        <strong>Hóa đơn chờ</strong>
+                        <Button size="small" icon={<PlusOutlined />} onClick={addPendingOrder}>Thêm đơn</Button>
+                    </div>
+                    <div className="pos-pending-list">
+                        {pendingOrders.map(order => {
+                            const quantity = (order.id === activeOrderId ? cart : order.cart)
+                                .reduce((sum, line) => sum + line.quantity, 0)
+                            return (
+                                <div key={order.id}
+                                     className={`pos-pending-card${order.id === activeOrderId ? ' active' : ''}`}
+                                     role="button" tabIndex={0}
+                                     onClick={() => switchPendingOrder(order)}
+                                     onKeyDown={event => event.key === 'Enter' && switchPendingOrder(order)}>
+                                    <div className="pos-pending-code">{order.code}</div>
+                                    <Tag color={quantity ? 'gold' : 'default'}>{quantity ? 'Chờ xử lý' : 'Chưa có SP'}</Tag>
+                                    <div className="pos-pending-count">{quantity} sản phẩm</div>
+                                    <Button className="pos-pending-remove" type="text" size="small"
+                                            icon={<CloseOutlined />} aria-label={`Đóng ${order.code}`}
+                                            onClick={event => { event.stopPropagation(); closePendingOrder(order.id) }} />
+                                </div>
+                            )
+                        })}
+                    </div>
+                </section>
+
+                <section className="pos-cart">
+                    <div className="pos-cart-head">
+                        <strong>Giỏ hàng</strong>
+                        <div className="pos-cart-toolbar">
+                            <Button size="small" icon={<ShoppingOutlined />}
+                                    onClick={() => setProductPickerOpen(true)}>Thêm sản phẩm</Button>
+                            {cart.length > 0 &&
+                                <Button size="small" danger icon={<DeleteOutlined />}
+                                        onClick={() => setActiveCart([])}>Xóa hết</Button>}
+                        </div>
+                    </div>
+                    <div className="pos-lines">
+                        {cart.length === 0
+                            ? <div className="pos-empty">
+                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa có sản phẩm">
+                                    <span style={{ color: '#98a2b3' }}>Chọn khách hàng và thêm sản phẩm vào giỏ</span>
+                                </Empty>
+                            </div>
+                            : cart.map(line => (
+                                <div className="pos-line" key={line.variant.id}>
+                                    <div className="pos-line-image">
+                                        <ProductImage
+                                            src={imgUrl(line.variant.anhUrl || line.product.hinhAnh?.[0]?.url)}
+                                            color={line.variant.mau?.hex}
+                                            alt={line.product.ten}
+                                        />
+                                    </div>
+                                    <div>
+                                        <div className="pos-line-name">{line.product.ten}</div>
+                                        <div className="pos-line-meta">
+                                            {line.variant.mau?.ten || 'Màu'} / {line.variant.size || 'Size'} · {vnd(line.variant.giaBan)}
+                                        </div>
+                                        <div className="pos-line-actions">
+                                            <Button size="small" icon={<MinusOutlined />}
+                                                    onClick={() => setQuantity(line.variant.id, line.quantity - 1)} />
+                                            <InputNumber size="small" min={1} max={line.variant.soLuong}
+                                                         value={line.quantity}
+                                                         onChange={value => setQuantity(line.variant.id, value)} />
+                                            <Button size="small" icon={<PlusOutlined />}
+                                                    onClick={() => setQuantity(line.variant.id, line.quantity + 1)} />
+                                        </div>
+                                    </div>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <strong>{vnd(line.variant.giaBan * line.quantity)}</strong>
+                                        <div>
+                                            <Button type="text" danger size="small" icon={<DeleteOutlined />}
+                                                    onClick={() => removeLine(line.variant.id)} />
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                    </div>
+                </section>
             </section>
 
-            <aside className="pos-cart">
-                <div className="pos-cart-head">
-                    <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-                        <strong style={{ fontSize: 16 }}>Giỏ hàng ({cart.reduce((n, x) => n + x.quantity, 0)})</strong>
-                        {cart.length > 0 &&
-                            <Button size="small" type="text" danger icon={<DeleteOutlined />}
-                                    onClick={() => setCart([])}>Xóa hết</Button>}
-                    </Space>
-                </div>
-                <div className="pos-lines">
-                    {cart.length === 0
-                        ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="Chưa chọn sản phẩm" />
-                        : cart.map(line => (
-                            <div className="pos-line" key={line.variant.id}>
-                                <div className="pos-line-image">
-                                    <ProductImage
-                                        src={imgUrl(line.variant.anhUrl || line.product.hinhAnh?.[0]?.url)}
-                                        color={line.variant.mau?.hex}
-                                        alt={line.product.ten}
-                                    />
-                                </div>
-                                <div>
-                                    <div className="pos-line-name">{line.product.ten}</div>
-                                    <div className="pos-line-meta">
-                                        {line.variant.mau?.ten || 'Màu'} / {line.variant.size || 'Size'} · {vnd(line.variant.giaBan)}
-                                    </div>
-                                    <div className="pos-line-actions">
-                                        <Button size="small" icon={<MinusOutlined />}
-                                                onClick={() => setQuantity(line.variant.id, line.quantity - 1)} />
-                                        <InputNumber size="small" min={1} max={line.variant.soLuong}
-                                                     value={line.quantity}
-                                                     onChange={value => setQuantity(line.variant.id, value)} />
-                                        <Button size="small" icon={<PlusOutlined />}
-                                                onClick={() => setQuantity(line.variant.id, line.quantity + 1)} />
-                                    </div>
-                                </div>
-                                <div style={{ textAlign: 'right' }}>
-                                    <strong>{vnd(line.variant.giaBan * line.quantity)}</strong>
-                                    <div>
-                                        <Button type="text" danger size="small" icon={<DeleteOutlined />}
-                                                onClick={() => removeLine(line.variant.id)} />
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                </div>
-                <div className="pos-total">
-                    <div className="pos-voucher">
-                        <div className="pos-voucher-input">
-                            <Input value={voucherInput} maxLength={20} placeholder="Nhập mã voucher"
-                                   onChange={event => setVoucherInput(event.target.value)}
-                                   onPressEnter={applyVoucher} />
-                            <Button loading={voucherLoading} disabled={!cart.length || !voucherInput.trim()}
-                                    onClick={applyVoucher}>Áp dụng</Button>
-                        </div>
-                        {activeVoucher && (
-                            <div className="pos-voucher-state">
-                                Đã áp dụng <strong>{activeVoucher}</strong>
-                                <Button type="link" size="small" onClick={removeVoucher}>Bỏ mã</Button>
-                            </div>
-                        )}
-                        {appliedVoucher && !activeVoucher && (
-                            <div className="pos-voucher-state">Giỏ hàng hoặc mã đã đổi; hãy áp dụng voucher lại.</div>
-                        )}
+            <aside className="pos-payment">
+                <div className="pos-payment-head">Thông tin thanh toán</div>
+                <div className="pos-payment-body">
+                    <div className="pos-customer-mode">
+                        <div className="pos-option-label">Khách hàng</div>
+                        <Radio.Group value={customerType} onChange={event => {
+                            setCustomerType(event.target.value)
+                            setSelectedCustomerId(null)
+                            setCustomerName('')
+                            setCustomerPhone('')
+                        }}>
+                            <Radio.Button value="guest">Vãng lai</Radio.Button>
+                            <Radio.Button value="registered">Có sẵn</Radio.Button>
+                        </Radio.Group>
                     </div>
-                    <div className="pos-breakdown"><span>Tạm tính</span><span>{vnd(displayedSubtotal)}</span></div>
-                    {discount > 0 && (
-                        <div className="pos-breakdown discount">
-                            <span>Voucher ({activeVoucher})</span><span>− {vnd(discount)}</span>
+                    {customerType === 'guest' ? (
+                        <div className="pos-customer">
+                            <Input placeholder="Tên khách vãng lai *" value={customerName}
+                                   onChange={event => setCustomerName(event.target.value)} maxLength={100} />
+                            <Input placeholder="Số điện thoại *" value={customerPhone}
+                                   onChange={event => setCustomerPhone(event.target.value)} maxLength={15} />
                         </div>
-                    )}
-                    <div className="pos-total-row"><span>Tổng thanh toán</span><strong>{vnd(total)}</strong></div>
-                    <Button type="primary" size="large" block disabled={!cart.length}
-                            icon={<DollarOutlined />} onClick={openCheckout}>
-                        Thanh toán
-                    </Button>
-                </div>
-            </aside>
-
-            <Modal title="Thanh toán tại quầy" open={checkoutOpen} onCancel={() => setCheckoutOpen(false)}
-                   onOk={submitCheckout} confirmLoading={submitting}
-                   okText={payment === 'Chuyển khoản' ? 'Xác nhận đã nhận tiền' : 'Hoàn tất thanh toán'}
-                   okButtonProps={{ disabled: payment === 'Chuyển khoản' && (!qrConfigured || !transferConfirmed) }}
-                   cancelText="Hủy" width={620}>
-                <Statistic title="Tổng tiền" value={total} suffix="₫"
-                           formatter={value => Number(value).toLocaleString('vi-VN')} />
-                <Divider />
-                <div style={{ marginBottom: 12 }}>
-                    <div style={{ marginBottom: 7, color: '#667085' }}>Khách hàng</div>
-                    <Radio.Group value={customerType} onChange={event => {
-                        setCustomerType(event.target.value)
-                        setSelectedCustomerId(null)
-                        setCustomerName('')
-                        setCustomerPhone('')
-                    }}>
-                        <Radio.Button value="guest">Khách vãng lai</Radio.Button>
-                        <Radio.Button value="registered">Khách hàng có sẵn</Radio.Button>
-                    </Radio.Group>
-                </div>
-                {customerType === 'guest' ? (
-                    <div className="pos-customer">
-                        <Input placeholder="Tên khách vãng lai *" value={customerName}
-                               onChange={e => setCustomerName(e.target.value)} maxLength={100} />
-                        <Input placeholder="Số điện thoại *" value={customerPhone}
-                               onChange={e => setCustomerPhone(e.target.value)} maxLength={15} />
-                    </div>
-                ) : (
-                    <>
+                    ) : (
                         <Select
                             showSearch
                             allowClear
                             style={{ width: '100%' }}
                             loading={customerLoading}
                             value={selectedCustomerId}
-                            placeholder="Tìm theo mã, tên hoặc số điện thoại khách hàng"
+                            placeholder="Chọn khách hàng"
                             optionFilterProp="label"
                             onChange={setSelectedCustomerId}
                             options={customers.map(customer => ({
@@ -453,66 +525,116 @@ export default function QuayOffline() {
                             }))}
                             notFoundContent={customerLoading ? 'Đang tải khách hàng...' : 'Không có khách hàng'}
                         />
-                        {selectedCustomerId && (() => {
-                            const customer = customers.find(item => item.id === selectedCustomerId)
-                            return customer ? (
-                                <div style={{ marginTop: 8, color: '#667085', fontSize: 12 }}>
-                                    {customer.hoVaTen} · {customer.soDienThoai}
-                                    {customer.email && ` · ${customer.email}`}
-                                </div>
-                            ) : null
-                        })()}
-                    </>
-                )}
-                <div style={{ marginTop: 14 }}>
-                    <div style={{ marginBottom: 7, color: '#667085' }}>Phương thức thanh toán</div>
-                    <Radio.Group value={payment} onChange={e => {
-                        setPayment(e.target.value)
+                    )}
+
+                    <Divider style={{ margin: '14px 0' }} />
+                    <div className="pos-option-label">Mã ưu đãi / giảm giá</div>
+                    <div className="pos-voucher-input">
+                        <Input value={voucherInput} maxLength={20} placeholder="Nhập mã voucher"
+                               onChange={event => setVoucherInput(event.target.value)}
+                               onPressEnter={applyVoucher} />
+                        <Button loading={voucherLoading} disabled={!cart.length || !voucherInput.trim()}
+                                onClick={applyVoucher}>Áp dụng</Button>
+                    </div>
+                    {activeVoucher && (
+                        <div className="pos-voucher-state">
+                            Đã áp dụng <strong>{activeVoucher}</strong>
+                            <Button type="link" size="small" onClick={removeVoucher}>Bỏ mã</Button>
+                        </div>
+                    )}
+                    {appliedVoucher && !activeVoucher &&
+                        <div className="pos-voucher-state">Giỏ hàng hoặc mã đã đổi; áp dụng lại voucher.</div>}
+
+                    <div className="pos-total">
+                        <div className="pos-breakdown"><span>Tổng tiền hàng</span><strong>{vnd(displayedSubtotal)}</strong></div>
+                        <div className="pos-breakdown discount"><span>Giảm giá</span><strong>− {vnd(discount)}</strong></div>
+                        <Divider style={{ margin: '8px 0' }} />
+                        <div className="pos-total-row">
+                            <strong>Khách cần trả</strong><strong>{vnd(total)}</strong>
+                        </div>
+                    </div>
+
+                    <div className="pos-option-label">Hình thức thanh toán</div>
+                    <Radio.Group className="pos-payment-method" value={payment} onChange={event => {
+                        setPayment(event.target.value)
                         setTransferConfirmed(false)
                     }}>
                         <Radio.Button value="Tiền mặt"><DollarOutlined /> Tiền mặt</Radio.Button>
-                        <Radio.Button value="Chuyển khoản"><CreditCardOutlined /> Chuyển khoản</Radio.Button>
+                        <Radio.Button value="Chuyển khoản"><CreditCardOutlined /> VietQR</Radio.Button>
                     </Radio.Group>
+                    {payment === 'Tiền mặt' ? (
+                        <div className="pos-cash-inputs">
+                            <InputNumber style={{ width: '100%' }} min={0} value={received}
+                                         onChange={changeReceived} placeholder="Khách thanh toán"
+                                         formatter={value => `${value}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
+                                         parser={value => value.replace(/[^\d]/g, '')} />
+                            <Input readOnly value={`Tiền thừa: ${vnd(change)}`} />
+                        </div>
+                    ) : (
+                        <>
+                            {qrConfigured
+                                ? <div className="pos-qr-panel"><img src={qrUrl} alt="Mã QR VietQR" /></div>
+                                : <div className="pos-qr-warning">Chưa cấu hình VietQR trong frontend/.env.local</div>}
+                            {qrConfigured && (
+                                <>
+                                    <Checkbox className="pos-qr-confirm" checked={transferConfirmed}
+                                              onChange={event => setTransferConfirmed(event.target.checked)}>
+                                        Đã kiểm tra và nhận đủ tiền
+                                    </Checkbox>
+                                    <div className="pos-qr-warning">Chỉ xác nhận sau khi kiểm tra giao dịch thực nhận.</div>
+                                </>
+                            )}
+                        </>
+                    )}
+
+                    <Input.TextArea style={{ marginTop: 12 }} rows={2} value={note}
+                                    onChange={event => setNote(event.target.value)} maxLength={255}
+                                    placeholder="Ghi chú hóa đơn..." />
+                    <Button className="pos-checkout" type="primary" size="large" block
+                            loading={submitting} disabled={!cart.length}
+                            icon={<DollarOutlined />} onClick={submitCheckout}>
+                        {payment === 'Chuyển khoản' ? 'Xác nhận đã nhận tiền' : 'Hoàn tất thanh toán'}
+                    </Button>
                 </div>
-                {payment === 'Chuyển khoản' && (
-                    <div className="pos-qr-panel">
-                        {qrConfigured ? (
-                            <>
-                                <div className="pos-qr-title">Quét mã để chuyển khoản</div>
-                                <img src={qrUrl} alt="Mã QR thanh toán VietQR" />
-                                <div className="pos-qr-detail">
-                                    <div>Techcombank · {vietQr.accountNumber}</div>
-                                    <div>{vietQr.accountName}</div>
-                                    <div className="pos-qr-amount">{vnd(Math.round(total))}</div>
-                                    <div>Nội dung chuyển khoản</div>
-                                    <div className="pos-qr-note">{transferReference}</div>
-                                </div>
-                                <Checkbox className="pos-qr-confirm" checked={transferConfirmed}
-                                          onChange={event => setTransferConfirmed(event.target.checked)}>
-                                    Tôi đã kiểm tra tài khoản và xác nhận đã nhận đủ tiền
-                                </Checkbox>
-                                <div className="pos-qr-warning">
-                                    Chỉ xác nhận sau khi đã kiểm tra giao dịch thực nhận trong ứng dụng ngân hàng.
-                                </div>
-                            </>
-                        ) : (
-                            <div className="pos-qr-warning">
-                                Chưa cấu hình VietQR. Kiểm tra các biến VITE_VIETQR_* trong frontend/.env.local
-                            </div>
-                        )}
-                    </div>
-                )}
-                {payment === 'Tiền mặt' &&
-                    <div style={{ marginTop: 14, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                        <InputNumber style={{ width: '100%' }} size="large" min={0} value={received}
-                                     onChange={changeReceived} placeholder="Tiền khách đưa"
-                                     formatter={v => `${v}`.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}
-                                     parser={v => v.replace(/[^\d]/g, '')} />
-                        <Input size="large" readOnly value={change ? `Tiền thừa: ${vnd(change)}` : 'Tiền thừa: 0 ₫'} />
-                    </div>}
-                <Input.TextArea style={{ marginTop: 14 }} rows={2} value={note}
-                                onChange={e => setNote(e.target.value)} maxLength={255}
-                                placeholder="Ghi chú hóa đơn..." />
+            </aside>
+
+            <Modal title="Chọn sản phẩm bán" open={productPickerOpen}
+                   onCancel={() => setProductPickerOpen(false)} footer={null} width={1100}>
+                <div className="pos-picker-tools">
+                    <Input className="pos-search" allowClear prefix={<SearchOutlined />}
+                           value={search} onChange={event => setSearch(event.target.value)}
+                           placeholder="Tên sản phẩm, màu sắc, kích cỡ..." />
+                    <Select value={brand} onChange={setBrand} options={[
+                        { value: 'all', label: 'Tất cả thương hiệu' },
+                        ...brands.map(value => ({ value, label: value })),
+                    ]} />
+                    <Select value={material} onChange={setMaterial} options={[
+                        { value: 'all', label: 'Tất cả chất liệu' },
+                        ...materials.map(value => ({ value, label: value })),
+                    ]} />
+                    <Select value={colorFilter} onChange={setColorFilter} options={[
+                        { value: 'all', label: 'Tất cả màu sắc' },
+                        ...colors.map(value => ({ value, label: value })),
+                    ]} />
+                    <Select value={sizeFilter} onChange={setSizeFilter} options={[
+                        { value: 'all', label: 'Tất cả kích cỡ' },
+                        ...sizes.map(value => ({ value, label: value })),
+                    ]} />
+                    <Button onClick={() => {
+                        setSearch('')
+                        setBrand('all')
+                        setMaterial('all')
+                        setColorFilter('all')
+                        setSizeFilter('all')
+                    }}>Đặt lại</Button>
+                </div>
+                {loading ? <div style={{ padding: 40, textAlign: 'center' }}>Đang tải sản phẩm...</div>
+                    : filtered.length === 0 ? <Empty description="Không tìm thấy sản phẩm" />
+                        : <div className="pos-picker-grid">
+                            {filtered.map(product => (
+                                <PosProductCard key={product.id} product={product} onAddVariant={addVariant} />
+                            ))}
+                        </div>}
             </Modal>
         </div>
     )
