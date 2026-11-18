@@ -10,6 +10,7 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import api from '../../api/axios'
+import InvoiceReceipt from '../../components/admin/InvoiceReceipt'
 
 const { RangePicker } = DatePicker
 
@@ -214,6 +215,31 @@ export default function HoaDon() {
 
     return (
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            {selectedOrder && (
+                <InvoiceReceipt
+                    hidden
+                    invoice={{
+                        code: selectedOrder.maHoaDon,
+                        createdAt: selectedOrder.ngayTao,
+                        customerName: selectedOrder.idKhachHang
+                            ? selectedOrder.tenKhachHang
+                            : selectedOrder.tenNguoiNhan,
+                        customerPhone: selectedOrder.sdtNguoiNhan,
+                        paymentMethod: selectedOrder.phuongThucThanhToanOnline
+                            ? `${selectedOrder.phuongThucThanhToan} (${selectedOrder.phuongThucThanhToanOnline})`
+                            : selectedOrder.phuongThucThanhToan,
+                        items: (selectedOrder.chiTietList || []).map(item => ({
+                            id: item.id,
+                            name: item.tenAo,
+                            variant: `${item.tenMau || 'Màu'} / ${item.tenKichThuoc || 'Size'}`,
+                            quantity: item.soLuong,
+                            unitPrice: item.donGia,
+                            lineTotal: item.thanhTien,
+                        })),
+                        total: selectedOrder.tongTien,
+                    }}
+                />
+            )}
             <Card title="Quản lý Hóa đơn">
                 <Row gutter={[16, 16]} align="middle">
                     <Col xs={24} md={7}>
@@ -303,7 +329,7 @@ export default function HoaDon() {
                 width={1000}
                 footer={[
                     <Button key="print" icon={<PrinterOutlined />} onClick={() => window.print()}>
-                        In hóa đơn (QR)
+                        In phiếu
                     </Button>,
                     <Button key="close" onClick={() => setDetailModalOpen(false)}>
                         Đóng

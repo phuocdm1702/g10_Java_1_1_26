@@ -148,8 +148,8 @@ public class HoaDonAdminService {
         invoice.setTienGiamGia(discount);
         invoice.setPhiGiaoHang(BigDecimal.ZERO);
         invoice.setTongTien(subtotal.subtract(discount));
-        invoice.setHinhThucMuaHang("Offline");
-        invoice.setGhiChu(req.ghiChu() == null || req.ghiChu().isBlank() ? null : req.ghiChu().trim());
+        invoice.setHinhThucMuaHang("Tại quầy");
+        invoice.setGhiChu(req.ghiChu() == null || req.ghiChu().isBlank() ? "" : req.ghiChu().trim());
         invoice.setTrangThai("Đã hoàn thành");
         hoaDonRepository.save(invoice);
 
