@@ -58,9 +58,10 @@ const styles = `
 .pos-line-meta { color: #667085; font-size: 12px; margin-top: 2px; }
 .pos-line-actions { display: flex; align-items: center; gap: 5px; margin-top: 6px; }
 .pos-line-actions .ant-input-number { width: 58px; }
-.pos-payment { display: flex; flex-direction: column; overflow: auto; }
+.pos-payment { display: flex; flex-direction: column; overflow: hidden; }
 .pos-payment-head { padding: 14px 16px; border-bottom: 1px solid #edf0f4; font-weight: 700; }
-.pos-payment-body { padding: 14px; }
+.pos-payment-body { flex: 1; min-height: 0; overflow-y: auto; padding: 14px; }
+.pos-payment-footer { flex: 0 0 auto; display: grid; gap: 10px; padding: 12px 14px 14px; border-top: 1px solid #edf0f4; background: #fff; }
 .pos-customer-mode { margin-bottom: 12px; }
 .pos-total { padding: 12px; border: 1px solid #edf0f4; border-radius: 8px; margin: 12px 0; }
 .pos-voucher { margin-bottom: 12px; }
@@ -78,9 +79,9 @@ const styles = `
 .pos-payment-method { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
 .pos-payment-method .ant-radio-button-wrapper { text-align: center; padding-inline: 8px; }
 .pos-cash-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-.pos-checkout { margin-top: 12px; }
+.pos-checkout { margin-top: 0; }
 @media (max-width: 1050px) { .pos { grid-template-columns: minmax(0, 1fr) 310px; } .pos-picker-tools { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 800px) { .pos { height: auto; min-height: 0; grid-template-columns: 1fr; } .pos-left { min-height: 620px; } .pos-cart { min-height: 340px; } .pos-payment { overflow: visible; } }
+@media (max-width: 800px) { .pos { height: auto; min-height: 0; grid-template-columns: 1fr; } .pos-left { min-height: 620px; } .pos-cart { min-height: 340px; } .pos-payment { overflow: visible; } .pos-payment-body { flex: initial; overflow: visible; } }
 @media (max-width: 560px) { .pos-picker-tools { grid-template-columns: 1fr 1fr; } .pos-picker-tools .pos-search { grid-column: 1 / -1; } .pos-picker-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .pos-pending { flex-basis: 120px; } .pos-cash-inputs { grid-template-columns: 1fr; } }
 `
 
@@ -262,7 +263,7 @@ export default function QuayOffline() {
     const setQuantity = (variantId, quantity) => {
         setActiveCart(current => current.map(line => {
             if (line.variant.id !== variantId) return line
-            const next = Math.max(1, Math.min(quantity || 1, line.variant.soLuong))
+            const next = Math.max(1, Math.m in(quantity || 1, line.variant.soLuong))
             return { ...line, quantity: next }
         }))
     }
@@ -587,7 +588,9 @@ export default function QuayOffline() {
                         </>
                     )}
 
-                    <Input.TextArea style={{ marginTop: 12 }} rows={2} value={note}
+                </div>
+                <div className="pos-payment-footer">
+                    <Input.TextArea rows={2} value={note}
                                     onChange={event => setNote(event.target.value)} maxLength={255}
                                     placeholder="Ghi chú hóa đơn..." />
                     <Button className="pos-checkout" type="primary" size="large" block
