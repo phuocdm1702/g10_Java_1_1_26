@@ -12,16 +12,24 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Set;
+import java.security.SecureRandom;
+import java.util.Map;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class HoaDonAdminService {
+    private static final SecureRandom RANDOM = new SecureRandom();
+
     private final HoaDonRepository hoaDonRepository;
     private final HoaDonChiTietRepository hoaDonChiTietRepository;
     private final SanPhamChiTietRepository sanPhamChiTietRepository;
     private final GiamGiaRepository giamGiaRepository;
     private final NhanVienRepository nhanVienRepository;
     private final GiamGiaService giamGiaService;
+    private final DonHangService donHangService;
+    private final KhachHangRepository khachHangRepository;
 
     // 5 trạng thái chuẩn theo CK_HoaDon_TrangThai trong SQL Server
     public static final String CHO_XAC_NHAN = "Chờ xác nhận";
@@ -36,6 +44,136 @@ public class HoaDonAdminService {
 
     private static final BigDecimal FREE_SHIP_THRESHOLD = new BigDecimal("10000000");
     private static final DateTimeFormatter LOG_TIME_FMT = DateTimeFormatter.ofPattern("dd/MM HH:mm");
+
+    @Transactional(readOnly = true)
+    public PosQuoteResponse quoteAtCounter(BaoGiaRequest req) {
+        BaoGiaResponse quote = donHangService.baoGia(req);
+        BigDecimal total = quote.tienTruocGiam().subtract(quote.tienGiam());
+        return new PosQuoteResponse(quote.tienTruocGiam(), quote.tienGiam(), total, quote.maGiamGia());
+    }
+
+    @Transactional(readOnly = true)
+    public List<PosCustomerResponse> getCounterCustomers() {
+        return khachHangRepository.findAllByTrangThaiTrueOrderByIdDesc().stream()
+                .map(customer -> new PosCustomerResponse(
+                        customer.getId(), customer.getMaKhachHang(), customer.getHoVaTen(),
+                        customer.getSoDienThoai(), customer.getEmail()))
+                .toList();
+    }
+
+    @Transactional
+    public DatHangResponse checkoutAtCounter(Integer staffId, PosCheckoutRequest req) {
+        NhanVien staff = nhanVienRepository.findById(staffId)
+                .filter(NhanVien::getTrangThai)
+                .orElseThrow(() -> new RuntimeException("Tài khoản nhân viên không hợp lệ"));
+
+        KhachHang customer = null;
+        String customerName;
+        String customerPhone;
+        if (req.idKhachHang() != null) {
+            customer = khachHangRepository.findById(req.idKhachHang())
+                    .filter(k -> Boolean.TRUE.equals(k.getTrangThai()))
+                    .orElseThrow(() -> new RuntimeException("Khách hàng không tồn tại hoặc đã bị khóa"));
+            customerName = customer.getHoVaTen();
+            customerPhone = customer.getSoDienThoai();
+        } else {
+            if (req.tenKhachHang() == null || req.tenKhachHang().isBlank()) {
+                throw new RuntimeException("Nhập tên khách vãng lai");
+            }
+            if (req.soDienThoai() == null || req.soDienThoai().isBlank()) {
+                throw new RuntimeException("Nhập số điện thoại khách vãng lai");
+            }
+            customerPhone = req.soDienThoai().replaceAll("\\s+", "");
+            if (!customerPhone.matches("^(0|\\+84)\\d{9}$")) {
+                throw new RuntimeException("Số điện thoại khách vãng lai không hợp lệ");
+            }
+            customerName = req.tenKhachHang().trim();
+        }
+
+        Map<Integer, Integer> quantities = new TreeMap<>();
+        for (CartItemRequest item : req.items()) {
+            quantities.merge(item.idBienThe(), item.soLuong(), Integer::sum);
+        }
+        if (quantities.size() > 50) throw new RuntimeException("Giỏ hàng quá lớn");
+
+        Map<Integer, SanPhamChiTiet> variants = sanPhamChiTietRepository.findAllByIdWithDetails(quantities.keySet())
+                .stream()
+                .collect(Collectors.toMap(SanPhamChiTiet::getId, v -> v));
+
+        BigDecimal subtotal = BigDecimal.ZERO;
+        for (Map.Entry<Integer, Integer> entry : quantities.entrySet()) {
+            SanPhamChiTiet variant = variants.get(entry.getKey());
+            if (variant == null || !Boolean.TRUE.equals(variant.getTrangThai())
+                    || !Boolean.TRUE.equals(variant.getSanPham().getTrangThai())) {
+                throw new RuntimeException("Có sản phẩm không còn được bán");
+            }
+            int stock = variant.getSoLuong() == null ? 0 : variant.getSoLuong();
+            if (entry.getValue() > stock) {
+                throw new RuntimeException("Sản phẩm " + variant.getSanPham().getTenAo()
+                        + " chỉ còn " + stock + " trong kho");
+            }
+            subtotal = subtotal.add(variant.getGiaBan().multiply(BigDecimal.valueOf(entry.getValue())));
+        }
+
+        BigDecimal discount = BigDecimal.ZERO;
+        GiamGia voucher = null;
+        if (req.maGiamGia() != null && !req.maGiamGia().isBlank()) {
+            BaoGiaResponse quote = donHangService.baoGia(new BaoGiaRequest(req.items(), req.maGiamGia()));
+            subtotal = quote.tienTruocGiam();
+            discount = quote.tienGiam();
+            voucher = giamGiaRepository.findByMaGiamGiaIgnoreCase(quote.maGiamGia())
+                    .orElseThrow(() -> new RuntimeException("Mã giảm giá không hợp lệ"));
+        }
+
+        for (Map.Entry<Integer, Integer> entry : quantities.entrySet()) {
+            if (sanPhamChiTietRepository.tryDeduct(entry.getKey(), entry.getValue()) == 0) {
+                throw new RuntimeException("Tồn kho đã thay đổi, vui lòng kiểm tra lại giỏ hàng");
+            }
+        }
+        if (voucher != null && giamGiaRepository.tryUse(voucher.getId()) == 0) {
+            throw new RuntimeException("Mã giảm giá vừa hết lượt sử dụng");
+        }
+
+        HoaDon invoice = new HoaDon();
+        invoice.setMaHoaDon(newCounterCode());
+        invoice.setNhanVien(staff);
+        invoice.setGiamGia(voucher);
+        invoice.setKhachHang(customer);
+        invoice.setTenNguoiNhan(customerName);
+        invoice.setSdtNguoiNhan(customerPhone);
+        invoice.setDiaChiGiaoHang("Mua trực tiếp tại quầy");
+        invoice.setPhuongThucThanhToan(req.phuongThucThanhToan());
+        invoice.setTrangThaiThanhToan("Đã thanh toán");
+        invoice.setTienTruocGiam(subtotal);
+        invoice.setTienGiamGia(discount);
+        invoice.setPhiGiaoHang(BigDecimal.ZERO);
+        invoice.setTongTien(subtotal.subtract(discount));
+        invoice.setHinhThucMuaHang("Offline");
+        invoice.setGhiChu(req.ghiChu() == null || req.ghiChu().isBlank() ? null : req.ghiChu().trim());
+        invoice.setTrangThai("Đã hoàn thành");
+        hoaDonRepository.save(invoice);
+
+        List<HoaDonChiTiet> details = quantities.entrySet().stream().map(entry -> {
+            HoaDonChiTiet detail = new HoaDonChiTiet();
+            detail.setHoaDon(invoice);
+            detail.setSanPhamChiTiet(variants.get(entry.getKey()));
+            detail.setSoLuong(entry.getValue());
+            detail.setDonGia(variants.get(entry.getKey()).getGiaBan());
+            return detail;
+        }).toList();
+        hoaDonChiTietRepository.saveAll(details);
+
+        return new DatHangResponse(invoice.getMaHoaDon(), invoice.getTongTien(), discount, BigDecimal.ZERO);
+    }
+
+    private String newCounterCode() {
+        String day = LocalDate.now().format(DateTimeFormatter.ofPattern("yyMMdd"));
+        for (int i = 0; i < 5; i++) {
+            String code = "QY" + day + String.format("%06d", RANDOM.nextInt(1_000_000));
+            if (!hoaDonRepository.existsByMaHoaDon(code)) return code;
+        }
+        throw new RuntimeException("Không tạo được mã hóa đơn, vui lòng thử lại");
+    }
 
     // Danh sách hóa đơn (Mặc định ngày hôm nay nếu không truyền ngày và tất cả=false)
     @Transactional(readOnly = true)

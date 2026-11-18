@@ -32,6 +32,7 @@ import PhieuGiamGia from './pages/admin/PhieuGiamGia'
 import ThuongHieu from './pages/admin/ThuongHieu'
 import ChatLieu from './pages/admin/ChatLieu'
 import KichThuoc from './pages/admin/KichThuoc'
+import QuayOffline from './pages/admin/QuayOffline'
 
 // Bọc một trang admin bằng kiểm tra vai trò, lấy danh sách vai trò từ auth/roles.js
 const guard = (path, element) => <ProtectedRoute roles={ACCESS[path]}>{element}</ProtectedRoute>
@@ -63,6 +64,7 @@ export default function App() {
             <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
                 <Route index element={<AdminHome />} />
                 <Route path="thong-ke" element={guard('/admin/thong-ke', <Dashboard />)} />
+                <Route path="ban-hang-offline" element={guard('/admin/ban-hang-offline', <QuayOffline />)} />
                 <Route path="hoa-don" element={guard('/admin/hoa-don', <HoaDon />)} />
                 <Route path="san-pham" element={guard('/admin/san-pham', <SanPham />)} />
                 <Route path="san-pham/them" element={guard('/admin/san-pham', <SanPhamForm />)} />
