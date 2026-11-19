@@ -5,13 +5,14 @@ import {
 } from 'antd'
 import {
     SearchOutlined, MinusOutlined, PlusOutlined, DeleteOutlined,
-    DollarOutlined, CreditCardOutlined, ShoppingOutlined, CloseOutlined
+    DollarOutlined, CreditCardOutlined, ShoppingOutlined, CloseOutlined, PrinterOutlined
 } from '@ant-design/icons'
 import api from '../../api/axios'
 import { fetchProducts } from '../../api/storeApi'
-import { imgUrl, vnd } from '../../data/products'
+import { imagesFor, imgUrl, vnd } from '../../data/products'
 import ProductImage from '../../components/user/ProductImage'
 import PosProductCard from '../../components/admin/PosProductCard'
+import InvoiceReceipt from '../../components/admin/InvoiceReceipt'
 
 const styles = `
 .pos { height: calc(100vh - 145px); min-height: 560px; display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; }
@@ -95,6 +96,22 @@ const vietQr = {
     template: import.meta.env.VITE_VIETQR_TEMPLATE || 'compact2',
 }
 
+const createEmptyOrderPaymentState = () => ({
+    customerType: 'guest',
+    selectedCustomerId: null,
+    customerName: '',
+    customerPhone: '',
+    payment: 'Tiền mặt',
+    transferConfirmed: false,
+    transferReference: `POS${Date.now()}`,
+    received: undefined,
+    note: '',
+    voucherInput: '',
+    appliedVoucher: '',
+    voucherQuote: null,
+    voucherCartKey: '',
+})
+
 export default function QuayOffline() {
     const { message } = App.useApp()
     const [products, setProducts] = useState([])
@@ -106,7 +123,10 @@ export default function QuayOffline() {
     const [sizeFilter, setSizeFilter] = useState('all')
     const [productPickerOpen, setProductPickerOpen] = useState(false)
     const [cart, setCart] = useState([])
-    const [pendingOrders, setPendingOrders] = useState([{ id: 1, code: 'HD001', cart: [] }])
+    const [pendingOrders, setPendingOrders] = useState(() => {
+        const paymentState = createEmptyOrderPaymentState()
+        return [{ id: 1, code: 'HD001', cart: [], paymentState }]
+    })
     const [activeOrderId, setActiveOrderId] = useState(1)
     const [nextOrderNumber, setNextOrderNumber] = useState(2)
     const [customerType, setCustomerType] = useState('guest')
@@ -117,10 +137,13 @@ export default function QuayOffline() {
     const [customerPhone, setCustomerPhone] = useState('')
     const [payment, setPayment] = useState('Tiền mặt')
     const [transferConfirmed, setTransferConfirmed] = useState(false)
-    const [transferReference, setTransferReference] = useState(() => `POS${Date.now()}`)
+    const [transferReference, setTransferReference] = useState(
+        () => pendingOrders[0].paymentState.transferReference)
     const [received, setReceived] = useState(undefined)
     const [note, setNote] = useState('')
     const [submitting, setSubmitting] = useState(false)
+    const [receiptOpen, setReceiptOpen] = useState(false)
+    const [receipt, setReceipt] = useState(null)
     const [voucherInput, setVoucherInput] = useState('')
     const [appliedVoucher, setAppliedVoucher] = useState('')
     const [voucherQuote, setVoucherQuote] = useState(null)
@@ -184,50 +207,77 @@ export default function QuayOffline() {
             order.id === activeOrderId ? { ...order, cart: resolved } : order))
     }
 
-    const resetOrderFields = () => {
-        setCustomerType('guest')
-        setSelectedCustomerId(null)
-        setCustomerName('')
-        setCustomerPhone('')
-        setPayment('Tiền mặt')
-        setReceived(undefined)
-        setTransferConfirmed(false)
-        setNote('')
-        setVoucherInput('')
-        setAppliedVoucher('')
-        setVoucherQuote(null)
-        setVoucherCartKey('')
+    const getCurrentPaymentState = () => ({
+        customerType,
+        selectedCustomerId,
+        customerName,
+        customerPhone,
+        payment,
+        transferConfirmed,
+        transferReference,
+        received,
+        note,
+        voucherInput,
+        appliedVoucher,
+        voucherQuote,
+        voucherCartKey,
+    })
+
+    const restorePaymentState = state => {
+        const paymentState = state || createEmptyOrderPaymentState()
+        setCustomerType(paymentState.customerType)
+        setSelectedCustomerId(paymentState.selectedCustomerId)
+        setCustomerName(paymentState.customerName)
+        setCustomerPhone(paymentState.customerPhone)
+        setPayment(paymentState.payment)
+        setTransferConfirmed(paymentState.transferConfirmed)
+        setTransferReference(paymentState.transferReference)
+        setReceived(paymentState.received)
+        setNote(paymentState.note)
+        setVoucherInput(paymentState.voucherInput)
+        setAppliedVoucher(paymentState.appliedVoucher)
+        setVoucherQuote(paymentState.voucherQuote)
+        setVoucherCartKey(paymentState.voucherCartKey)
     }
 
     const addPendingOrder = () => {
         const id = nextOrderNumber
-        setPendingOrders(current => [...current, {
-            id, code: `HD${String(id).padStart(3, '0')}`, cart: [],
-        }])
+        const paymentState = createEmptyOrderPaymentState()
+        setPendingOrders(current => [
+            ...current.map(order => order.id === activeOrderId
+                ? { ...order, cart, paymentState: getCurrentPaymentState() }
+                : order),
+            { id, code: `HD${String(id).padStart(3, '0')}`, cart: [], paymentState },
+        ])
         setNextOrderNumber(id + 1)
         setActiveOrderId(id)
         setCart([])
-        setTransferReference(`POS${Date.now()}`)
-        resetOrderFields()
+        restorePaymentState(paymentState)
     }
 
     const switchPendingOrder = order => {
         if (order.id === activeOrderId) return
+        const paymentState = order.paymentState || createEmptyOrderPaymentState()
+        setPendingOrders(current => current.map(currentOrder =>
+            currentOrder.id === activeOrderId
+                ? { ...currentOrder, cart, paymentState: getCurrentPaymentState() }
+                : currentOrder))
         setActiveOrderId(order.id)
         setCart(order.cart)
-        setTransferReference(`POS${Date.now()}`)
-        resetOrderFields()
+        restorePaymentState(paymentState)
     }
 
     const closePendingOrder = orderId => {
         if (pendingOrders.length === 1) {
             const id = nextOrderNumber
-            setPendingOrders([{ id, code: `HD${String(id).padStart(3, '0')}`, cart: [] }])
+            const paymentState = createEmptyOrderPaymentState()
+            setPendingOrders([{
+                id, code: `HD${String(id).padStart(3, '0')}`, cart: [], paymentState,
+            }])
             setNextOrderNumber(id + 1)
             setActiveOrderId(id)
             setCart([])
-            setTransferReference(`POS${Date.now()}`)
-            resetOrderFields()
+            restorePaymentState(paymentState)
             return
         }
         const remaining = pendingOrders.filter(order => order.id !== orderId)
@@ -236,8 +286,7 @@ export default function QuayOffline() {
             const next = remaining[0]
             setActiveOrderId(next.id)
             setCart(next.cart)
-            setTransferReference(`POS${Date.now()}`)
-            resetOrderFields()
+            restorePaymentState(next.paymentState)
         }
     }
 
@@ -383,17 +432,37 @@ export default function QuayOffline() {
                 items: cartItems,
             })
             message.success(`Đã tạo hóa đơn ${data.maHoaDon}`)
+            const selectedCustomer = customers.find(customer =>
+                String(customer.id) === String(selectedCustomerId))
+            setReceipt({
+                code: data.maHoaDon,
+                createdAt: new Date().toISOString(),
+                customerName: customerType === 'guest' ? customerName.trim() : selectedCustomer?.hoVaTen,
+                customerPhone: customerType === 'guest'
+                    ? customerPhone.replace(/\s+/g, '')
+                    : selectedCustomer?.soDienThoai,
+                paymentMethod: payment,
+                items: cart.map(line => ({
+                    id: line.variant.id,
+                    name: line.product.ten,
+                    variant: `${line.variant.mau?.ten || 'Màu'} / ${line.variant.size || 'Size'}`,
+                    quantity: line.quantity,
+                    unitPrice: line.variant.giaBan,
+                })),
+                total: data.tongTien,
+            })
+            setReceiptOpen(true)
             const nextId = nextOrderNumber
-            const remainingOrders = pendingOrders.filter(order => order.id !== activeOrderId)
-            setPendingOrders([...remainingOrders, {
-                id: nextId, code: `HD${String(nextId).padStart(3, '0')}`, cart: [],
-            }])
+            const paymentState = createEmptyOrderPaymentState()
+            setPendingOrders(current => [
+                ...current.filter(order => order.id !== activeOrderId),
+                { id: nextId, code: `HD${String(nextId).padStart(3, '0')}`, cart: [], paymentState },
+            ])
             setNextOrderNumber(nextId + 1)
             setActiveOrderId(nextId)
             setCart([])
             setProductPickerOpen(false)
-            resetOrderFields()
-            setTransferReference(`POS${Date.now()}`)
+            restorePaymentState(paymentState)
             load()
         } catch (error) {
             message.error(error.response?.data?.message || 'Không thể thanh toán')
@@ -455,7 +524,7 @@ export default function QuayOffline() {
                                 <div className="pos-line" key={line.variant.id}>
                                     <div className="pos-line-image">
                                         <ProductImage
-                                            src={imgUrl(line.variant.anhUrl || line.product.hinhAnh?.[0]?.url)}
+                                            src={imgUrl(line.variant.anhUrl) || imagesFor(line.product, line.variant.mau?.ma)[0]}
                                             color={line.variant.mau?.hex}
                                             alt={line.product.ten}
                                         />
@@ -638,6 +707,20 @@ export default function QuayOffline() {
                                 <PosProductCard key={product.id} product={product} onAddVariant={addVariant} />
                             ))}
                         </div>}
+            </Modal>
+            <Modal
+                title="Phiếu bán hàng"
+                open={receiptOpen}
+                onCancel={() => setReceiptOpen(false)}
+                width={560}
+                footer={[
+                    <Button key="close" onClick={() => setReceiptOpen(false)}>Đóng</Button>,
+                    <Button key="print" type="primary" icon={<PrinterOutlined />} onClick={() => window.print()}>
+                        In phiếu
+                    </Button>,
+                ]}
+            >
+                <InvoiceReceipt invoice={receipt} />
             </Modal>
         </div>
     )

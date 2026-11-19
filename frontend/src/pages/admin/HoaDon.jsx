@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import {
     Card, Table, Button, Input, Select, DatePicker, Space, Tag, Tabs,
     Modal, Form, InputNumber, Descriptions, Steps, Divider, QRCode,
-    Row, Col, message, Popconfirm, Switch
+    Row, Col, message, Popconfirm, Switch, Image
 } from 'antd'
 import {
     SearchOutlined, ReloadOutlined, EyeOutlined, PrinterOutlined,
@@ -10,8 +10,29 @@ import {
 } from '@ant-design/icons'
 import dayjs from 'dayjs'
 import api from '../../api/axios'
+import InvoiceReceipt from '../../components/admin/InvoiceReceipt'
+import Shirt from '../../components/user/Shirt'
+import { imgUrl } from '../../data/products'
 
 const { RangePicker } = DatePicker
+
+// Ảnh dòng hóa đơn; không có URL hoặc tải lỗi thì vẽ áo SVG theo màu
+function LineThumb({ url, hex, alt }) {
+    const [failed, setFailed] = useState(null)
+    const src = imgUrl(url)
+    if (!src || failed === src) {
+        return (
+            <div style={{ width: 48, height: 56, borderRadius: 6, background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 36 }}><Shirt color={hex || '#d9d9d9'} /></div>
+            </div>
+        )
+    }
+    return (
+        <Image src={src} alt={alt} width={48} height={56}
+               style={{ objectFit: 'cover', borderRadius: 6 }}
+               onError={() => setFailed(src)} />
+    )
+}
 
 const formatVND = (val) =>
     val != null ? Number(val).toLocaleString('vi-VN') + ' ₫' : '0 ₫'
@@ -214,6 +235,31 @@ export default function HoaDon() {
 
     return (
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+            {selectedOrder && (
+                <InvoiceReceipt
+                    hidden
+                    invoice={{
+                        code: selectedOrder.maHoaDon,
+                        createdAt: selectedOrder.ngayTao,
+                        customerName: selectedOrder.idKhachHang
+                            ? selectedOrder.tenKhachHang
+                            : selectedOrder.tenNguoiNhan,
+                        customerPhone: selectedOrder.sdtNguoiNhan,
+                        paymentMethod: selectedOrder.phuongThucThanhToanOnline
+                            ? `${selectedOrder.phuongThucThanhToan} (${selectedOrder.phuongThucThanhToanOnline})`
+                            : selectedOrder.phuongThucThanhToan,
+                        items: (selectedOrder.chiTietList || []).map(item => ({
+                            id: item.id,
+                            name: item.tenAo,
+                            variant: `${item.tenMau || 'Màu'} / ${item.tenKichThuoc || 'Size'}`,
+                            quantity: item.soLuong,
+                            unitPrice: item.donGia,
+                            lineTotal: item.thanhTien,
+                        })),
+                        total: selectedOrder.tongTien,
+                    }}
+                />
+            )}
             <Card title="Quản lý Hóa đơn">
                 <Row gutter={[16, 16]} align="middle">
                     <Col xs={24} md={7}>
@@ -303,7 +349,7 @@ export default function HoaDon() {
                 width={1000}
                 footer={[
                     <Button key="print" icon={<PrinterOutlined />} onClick={() => window.print()}>
-                        In hóa đơn (QR)
+                        In phiếu
                     </Button>,
                     <Button key="close" onClick={() => setDetailModalOpen(false)}>
                         Đóng
@@ -491,6 +537,12 @@ export default function HoaDon() {
                             pagination={false}
                             dataSource={filteredOrderItems}
                             columns={[
+                                {
+                                    title: 'Ảnh',
+                                    dataIndex: 'anhUrl',
+                                    width: 64,
+                                    render: (url, r) => <LineThumb url={url} hex={r.maHex} alt={r.tenAo} />,
+                                },
                                 { title: 'Mã biến thể', dataIndex: 'maAoChiTiet' },
                                 { title: 'Tên sản phẩm', dataIndex: 'tenAo' },
                                 { title: 'Màu sắc', dataIndex: 'tenMau' },

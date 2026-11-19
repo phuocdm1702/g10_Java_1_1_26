@@ -30,6 +30,7 @@ public class HoaDonAdminService {
     private final GiamGiaService giamGiaService;
     private final DonHangService donHangService;
     private final KhachHangRepository khachHangRepository;
+    private final AnhRepository anhRepository;
 
     // 5 trạng thái chuẩn theo CK_HoaDon_TrangThai trong SQL Server
     public static final String CHO_XAC_NHAN = "Chờ xác nhận";
@@ -148,8 +149,8 @@ public class HoaDonAdminService {
         invoice.setTienGiamGia(discount);
         invoice.setPhiGiaoHang(BigDecimal.ZERO);
         invoice.setTongTien(subtotal.subtract(discount));
-        invoice.setHinhThucMuaHang("Offline");
-        invoice.setGhiChu(req.ghiChu() == null || req.ghiChu().isBlank() ? null : req.ghiChu().trim());
+        invoice.setHinhThucMuaHang("Tại quầy");
+        invoice.setGhiChu(req.ghiChu() == null || req.ghiChu().isBlank() ? "" : req.ghiChu().trim());
         invoice.setTrangThai("Đã hoàn thành");
         hoaDonRepository.save(invoice);
 
@@ -465,13 +466,34 @@ public class HoaDonAdminService {
         h.setGhiChu(combined);
     }
 
+    // Cột SanPhamChiTiet.anh_url hầu như trống, nên ảnh dòng hóa đơn lấy từ bảng Anh:
+    // đúng màu trước, không có thì ảnh chung (id_mau = null), giống đơn khách / cửa hàng
+    private Map<Integer, List<Anh>> anhOf(List<HoaDonChiTiet> items) {
+        Set<Integer> productIds = items.stream()
+                .map(c -> c.getSanPhamChiTiet().getSanPham().getId()).collect(Collectors.toSet());
+        return productIds.isEmpty() ? Map.of()
+                : anhRepository.findByProductIds(productIds).stream()
+                .collect(Collectors.groupingBy(a -> a.getSanPham().getId()));
+    }
+
+    private String pickImage(List<Anh> list, Integer idMau) {
+        return list.stream().filter(a -> a.getMauSac() != null && idMau.equals(a.getMauSac().getId()))
+                .findFirst()
+                .or(() -> list.stream().filter(a -> a.getMauSac() == null).findFirst())
+                .map(Anh::getAnhUrl).orElse(null);
+    }
+
     private HoaDonResponse toResponse(HoaDon h, List<HoaDonChiTiet> items) {
         KhachHang kh = h.getKhachHang();
         NhanVien nv = h.getNhanVien();
         GiamGia gg = h.getGiamGia();
 
+        Map<Integer, List<Anh>> images = anhOf(items);
         List<HoaDonChiTietResponse> itemDtos = items.stream().map(c -> {
             SanPhamChiTiet v = c.getSanPhamChiTiet();
+            String anhUrl = v.getAnhUrl() != null && !v.getAnhUrl().isBlank()
+                    ? v.getAnhUrl()
+                    : pickImage(images.getOrDefault(v.getSanPham().getId(), List.of()), v.getMauSac().getId());
             return new HoaDonChiTietResponse(
                     c.getId(),
                     v.getId(),
@@ -481,7 +503,7 @@ public class HoaDonAdminService {
                     v.getMauSac().getMaHex(),
                     v.getKichThuoc().getTenKichThuoc(),
                     v.getChatLieu().getTenChatLieu(),
-                    v.getAnhUrl(),
+                    anhUrl,
                     c.getSoLuong(),
                     v.getSoLuong(),
                     c.getDonGia(),
