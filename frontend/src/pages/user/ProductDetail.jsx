@@ -1,14 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
-import { Modal, Table } from 'antd'
-import { CarOutlined, SwapOutlined, WalletOutlined } from '@ant-design/icons'
+import { Modal, Table, App } from 'antd'
+import { CarOutlined, SwapOutlined, WalletOutlined, CheckOutlined } from '@ant-design/icons'
 import { fetchProduct, searchProducts } from '../../api/storeApi'
-import { colorsOf, imagesFor, vnd } from '../../data/products'
+import { colorsOf, buildProductGallery, ownImagesFor, vnd } from '../../data/products'
 import { useCart } from '../../context/CartContext'
-import ProductImage from '../../components/user/ProductImage'
 import ProductCard from '../../components/user/ProductCard'
+import Shirt from '../../components/user/Shirt'
+import ProductGalleryShopee, { VISIBLE_THUMBS } from '../../components/user/ProductGalleryShopee'
 
-// Bảng tham khảo. Hãy thay bằng số đo thực tế của cửa hàng.
 const SIZE_TABLE = [
     { key: 'S', size: 'S', cao: '160 đến 168 cm', nang: '52 đến 60 kg', nguc: '88 đến 92 cm' },
     { key: 'M', size: 'M', cao: '165 đến 172 cm', nang: '58 đến 66 kg', nguc: '92 đến 96 cm' },
@@ -45,22 +45,120 @@ export default function ProductDetail() {
 }
 
 function ProductView({ sp }) {
+    const { message } = App.useApp()
     const [qs] = useSearchParams()
-    const colors = colorsOf(sp)
-    const [mau, setMau] = useState(colors.find(c => c.ma === qs.get('mau')) ?? colors[0])
+    const colors = useMemo(() => colorsOf(sp), [sp])
+    const gallery = useMemo(() => buildProductGallery(sp), [sp])
+
+    const initialColor = useMemo(() => colors.find(c => c.ma === qs.get('mau')) ?? null, [colors, qs])
+    const [mau, setMau] = useState(initialColor)
     const [size, setSize] = useState(null)
     const [qty, setQty] = useState(1)
-    const [idx, setIdx] = useState(0)
+
+    const [idx, setIdx] = useState(() => {
+        if (initialColor) {
+            const foundIdx = gallery.findIndex(g => g.maMau === initialColor.ma)
+            return foundIdx >= 0 ? foundIdx : 0
+        }
+        return 0
+    })
+    const [hoverIdx, setHoverIdx] = useState(null)
+    const [thumbStart, setThumbStart] = useState(0)
     const [guide, setGuide] = useState(false)
     const { add } = useCart()
 
     useEffect(() => { document.title = `${sp.ten} | POLO HOUSE` }, [sp.ten])
 
-    const imgs = imagesFor(sp, mau.ma)
-    const vs = sp.bienThe.filter(v => v.mau.ma === mau.ma)
-    const bt = vs.find(v => v.size === size)
-    const v0 = vs[0]
+    const ensureThumbVisible = targetIdx => {
+        setThumbStart(prev => {
+            if (targetIdx < prev) return targetIdx
+            if (targetIdx >= prev + VISIBLE_THUMBS) return Math.max(0, targetIdx - VISIBLE_THUMBS + 1)
+            return prev
+        })
+    }
+
+    const goImage = nextIdx => {
+        if (gallery.length === 0) return
+        const normalized = ((nextIdx % gallery.length) + gallery.length) % gallery.length
+        setIdx(normalized)
+        setHoverIdx(null)
+        ensureThumbVisible(normalized)
+    }
+
+    const handleSelectColor = c => {
+        if (mau?.ma === c.ma) {
+            setMau(null)
+            setSize(null)
+            setQty(1)
+            setIdx(0)
+            setHoverIdx(null)
+            ensureThumbVisible(0)
+            return
+        }
+        setMau(c)
+        setSize(null)
+        setQty(1)
+        const colorImgIdx = gallery.findIndex(g => g.maMau === c.ma)
+        if (colorImgIdx >= 0) {
+            setIdx(colorImgIdx)
+            ensureThumbVisible(colorImgIdx)
+        }
+        setHoverIdx(null)
+    }
+
+    const handleHoverColor = c => {
+        if (!c) {
+            setHoverIdx(null)
+            return
+        }
+        const colorImgIdx = gallery.findIndex(g => g.maMau === c.ma)
+        if (colorImgIdx >= 0) setHoverIdx(colorImgIdx)
+    }
+
+    const handleSelectThumb = i => {
+        setIdx(i)
+        setHoverIdx(null)
+        const item = gallery[i]
+        if (item?.maMau) {
+            const matchedColor = colors.find(c => c.ma === item.maMau)
+            if (matchedColor && mau?.ma !== matchedColor.ma) {
+                setMau(matchedColor)
+                setSize(null)
+                setQty(1)
+            }
+        }
+    }
+
+    const displayIdx = hoverIdx ?? idx
+    const currentSlide = gallery[displayIdx] ?? gallery[0] ?? { url: null, maMau: null, tenMau: '', hex: colors[0]?.hex }
+
+    const vs = useMemo(() => {
+        if (mau) return sp.bienThe.filter(v => v.mau.ma === mau.ma)
+        const bySize = new Map()
+        sp.bienThe.forEach(v => {
+            const prev = bySize.get(v.size)
+            if (!prev || (prev.soLuong === 0 && v.soLuong > 0)) {
+                bySize.set(v.size, v)
+            }
+        })
+        return [...bySize.values()]
+    }, [sp.bienThe, mau])
+
+    const bt = mau ? vs.find(v => v.size === size) : null
+    const v0 = (mau ? vs[0] : null) ?? sp.bienThe.reduce((a, b) => (b.giaBan < a.giaBan ? b : a), sp.bienThe[0])
     const sale = v0.giaGoc > v0.giaBan ? Math.round((1 - v0.giaBan / v0.giaGoc) * 100) : 0
+
+    const handleAddToCart = () => {
+        if (!mau) {
+            message.warning('Vui lòng chọn Màu sắc sản phẩm')
+            return
+        }
+        if (!bt) {
+            message.warning('Vui lòng chọn Kích thước (Size)')
+            return
+        }
+        add(bt.id, qty)
+    }
 
     return (
         <>
@@ -69,16 +167,18 @@ function ProductView({ sp }) {
             </nav>
 
             <div className="detail">
-                <div>
-                    <div className="pic"><ProductImage src={imgs[idx]} color={mau.hex} alt={sp.ten} /></div>
-                    {imgs.length > 1 && (
-                        <div className="thumbs">
-                            {imgs.map((u, i) => (
-                                <img key={u} src={u} alt={`Ảnh ${i + 1}`} className={`tn ${i === idx ? 'on' : ''}`} onClick={() => setIdx(i)} />
-                            ))}
-                        </div>
-                    )}
-                </div>
+                <ProductGalleryShopee
+                    productName={sp.ten}
+                    gallery={gallery}
+                    defaultColorHex={colors[0]?.hex}
+                    activeIndex={idx}
+                    hoverIndex={hoverIdx}
+                    thumbStart={thumbStart}
+                    onChangeIndex={goImage}
+                    onHoverIndex={setHoverIdx}
+                    onChangeThumbStart={setThumbStart}
+                    onSelectThumb={handleSelectThumb}
+                />
 
                 <div>
                     <h1>{sp.ten}</h1>
@@ -87,38 +187,82 @@ function ProductView({ sp }) {
                         {sale > 0 && <><s>{vnd(v0.giaGoc)}</s><span className="off">Giảm {sale}%</span></>}
                     </div>
 
-                    <p className="lbl">Màu: <b>{mau.ten}</b></p>
-                    <div className="sws">
-                        {colors.map(c => (
-                            <span key={c.ma} role="button" tabIndex={0} aria-label={`Màu ${c.ten}`} title={c.ten}
-                                  className={`sw lg ${c.ma === mau.ma ? 'on' : ''}`} style={{ background: c.hex }}
-                                  onClick={() => { setMau(c); setSize(null); setQty(1); setIdx(0) }}
-                                  onKeyDown={e => e.key === 'Enter' && (setMau(c), setSize(null), setQty(1), setIdx(0))} />
-                        ))}
+                    <div className="lblrow" style={{ marginTop: 26 }}>
+                        <p className="lbl" style={{ margin: 0 }}>
+                            Màu sắc{mau ? <>: <b>{mau.ten}</b></> : ''}
+                        </p>
+                        {mau && (
+                            <button type="button" className="linkbtn" onClick={() => handleSelectColor(mau)}>
+                                Bỏ chọn
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="sp-color-chips">
+                        {colors.map(c => {
+                            const ownThumbUrl = ownImagesFor(sp, c.ma)[0]
+                            const isSelected = mau?.ma === c.ma
+                            return (
+                                <button
+                                    key={c.ma}
+                                    type="button"
+                                    className={`sp-color-chip ${isSelected ? 'on' : ''}`}
+                                    onMouseEnter={() => handleHoverColor(c)}
+                                    onMouseLeave={() => handleHoverColor(null)}
+                                    onClick={() => handleSelectColor(c)}
+                                >
+                                    <span className="sp-chip-thumb">
+                                        {ownThumbUrl ? (
+                                            <img src={ownThumbUrl} alt={c.ten} />
+                                        ) : (
+                                            <Shirt color={c.hex} />
+                                        )}
+                                    </span>
+                                    <span className="sp-chip-name">{c.ten}</span>
+                                    {isSelected && <span className="sp-chip-check"><CheckOutlined /></span>}
+                                </button>
+                            )
+                        })}
                     </div>
 
                     <div className="lblrow">
-                        <p className="lbl">Kích thước</p>
-                        <button className="linkbtn" onClick={() => setGuide(true)}>Bảng chọn size</button>
+                        <p className="lbl">Kích thước {size && <b>: {size}</b>}</p>
+                        <button type="button" className="linkbtn" onClick={() => setGuide(true)}>Bảng chọn size</button>
                     </div>
                     <div className="szs">
                         {vs.map(v => (
-                            <button key={v.id} disabled={v.soLuong === 0} aria-label={`Size ${v.size}${v.soLuong === 0 ? ', hết hàng' : ''}`}
+                            <button key={v.id} type="button" disabled={v.soLuong === 0}
+                                    aria-label={`Size ${v.size}${v.soLuong === 0 ? ', hết hàng' : ''}`}
                                     className={`sz ${v.size === size ? 'on' : ''}`}
-                                    onClick={() => { setSize(v.size); setQty(1) }}>{v.size}</button>
+                                    onClick={() => {
+                                        if (!mau) {
+                                            const slideColor = currentSlide?.maMau
+                                                ? colors.find(c => c.ma === currentSlide.maMau)
+                                                : colors[0]
+                                            if (slideColor) setMau(slideColor)
+                                        }
+                                        setSize(v.size)
+                                        setQty(1)
+                                    }}>
+                                {v.size}
+                            </button>
                         ))}
                     </div>
                     {bt && (bt.soLuong <= 5
                         ? <p className="warn">Chỉ còn {bt.soLuong} sản phẩm</p>
-                        : <p className="muted">Còn hàng</p>)}
+                        : <p className="muted">Còn {bt.soLuong} sản phẩm trong kho</p>)}
 
                     <div className="qty big">
-                        <button aria-label="Giảm số lượng" onClick={() => setQty(Math.max(1, qty - 1))}>−</button>{qty}
-                        <button aria-label="Tăng số lượng" disabled={!bt || qty >= bt.soLuong}
+                        <button type="button" aria-label="Giảm số lượng" onClick={() => setQty(Math.max(1, qty - 1))}>−</button>{qty}
+                        <button type="button" aria-label="Tăng số lượng" disabled={!bt || qty >= bt.soLuong}
                                 onClick={() => setQty(Math.min(bt?.soLuong ?? 1, qty + 1))}>+</button>
                     </div>
-                    <button className="btn full" disabled={!bt} onClick={() => add(bt.id, qty)}>
-                        {bt ? 'Thêm vào giỏ hàng' : 'Chọn kích thước để thêm vào giỏ'}
+                    <button type="button" className="btn full" disabled={Boolean(mau && size && !bt)} onClick={handleAddToCart}>
+                        {!mau
+                            ? 'Chọn màu sắc và kích thước để thêm vào giỏ'
+                            : !size
+                                ? 'Chọn kích thước để thêm vào giỏ'
+                                : 'Thêm vào giỏ hàng'}
                     </button>
 
                     <div className="benefits">
