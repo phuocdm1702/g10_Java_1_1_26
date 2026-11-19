@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons'
 import api from '../../api/axios'
 import { fetchProducts } from '../../api/storeApi'
-import { imgUrl, vnd } from '../../data/products'
+import { imagesFor, imgUrl, vnd } from '../../data/products'
 import ProductImage from '../../components/user/ProductImage'
 import PosProductCard from '../../components/admin/PosProductCard'
 import InvoiceReceipt from '../../components/admin/InvoiceReceipt'
@@ -524,7 +524,7 @@ export default function QuayOffline() {
                                 <div className="pos-line" key={line.variant.id}>
                                     <div className="pos-line-image">
                                         <ProductImage
-                                            src={imgUrl(line.variant.anhUrl || line.product.hinhAnh?.[0]?.url)}
+                                            src={imgUrl(line.variant.anhUrl) || imagesFor(line.product, line.variant.mau?.ma)[0]}
                                             color={line.variant.mau?.hex}
                                             alt={line.product.ten}
                                         />
