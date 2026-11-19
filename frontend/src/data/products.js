@@ -61,7 +61,7 @@ export const buildProductGallery = sp => {
     valid.filter(h => h.maMau == null).forEach(h => {
         pushItem(h.resolvedUrl, null, 'Ảnh chung', defaultHex, false)
     })
-
+// 2
     // 2. Tiếp theo là từng màu của sản phẩm:
     // Nếu màu đó chưa có ảnh thật -> tạo 1 slide áo mẫu SVG (url: null) đúng màu đó (VD: Đỏ đô -> áo SVG màu đỏ đô)
     colors.forEach(c => {
