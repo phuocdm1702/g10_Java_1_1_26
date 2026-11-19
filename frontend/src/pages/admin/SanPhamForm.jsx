@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Card, Form, Input, Select, Button, Table, InputNumber, Space, Switch, Row, Col, Spin, App } from 'antd'
-import AnhSanPham, { groupKeyOf } from '../../components/admin/AnhSanPham'
+import AnhSanPham from '../../components/admin/AnhSanPham'
 import { ArrowLeftOutlined, SaveOutlined } from '@ant-design/icons'
 import api from '../../api/axios'
 
@@ -36,6 +36,7 @@ export default function SanPhamForm() {
     const [pendingFiles, setPendingFiles] = useState([])
     const [pendingDeletes, setPendingDeletes] = useState([])
     const [pendingPrimaries, setPendingPrimaries] = useState({})
+    const [pendingCrops, setPendingCrops] = useState({})
 
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
@@ -128,17 +129,37 @@ export default function SanPhamForm() {
                 targetId = data.id
             }
 
-            // 1. Xóa thật các ảnh đã đánh dấu xóa tạm khi bấm "Lưu sản phẩm"
+            // 1. Xóa thật các ảnh đã bấm nút Thùng rác
+            let imageError = null
             for (const delId of pendingDeletes) {
                 try {
                     await api.delete(`/admin/anh/${delId}`)
                 } catch (err) {
-                    message.error(err.response?.data?.message ?? `Không xóa được ảnh #${delId}`)
+                    imageError = err.response?.data?.message ?? 'Không thể xóa một số hình ảnh'
                 }
             }
             setPendingDeletes([])
 
-            // 2. Đẩy các ảnh đang xem trước tạm trên FE lên Cloudinary
+            // 2. Xử lý các ảnh cũ đã được Căn chỉnh / Crop tại chỗ (tải bản đã crop lên và thay thế ảnh cũ)
+            const replacedSavedIdMap = {}
+            for (const [savedIdStr, cropInfo] of Object.entries(pendingCrops)) {
+                const oldId = Number(savedIdStr)
+                if (pendingDeletes.includes(oldId)) continue
+                const fd = new FormData()
+                fd.append('file', cropInfo.file)
+                if (cropInfo.idMau != null) fd.append('idMau', cropInfo.idMau)
+                try {
+                    const res = await api.post(`/admin/san-pham/${targetId}/anh`, fd)
+                    if (res.data?.id) replacedSavedIdMap[oldId] = res.data.id
+                    await api.delete(`/admin/anh/${oldId}`)
+                    if (cropInfo.previewUrl) URL.revokeObjectURL(cropInfo.previewUrl)
+                } catch (err) {
+                    imageError = err.response?.data?.message ?? 'Không thể cập nhật ảnh đã căn chỉnh'
+                }
+            }
+            setPendingCrops({})
+
+            // 3. Đẩy các ảnh mới chọn trên FE lên Cloudinary
             const uploadedIdByUid = {}
             if (pendingFiles.length > 0 && targetId) {
                 const failed = []
@@ -150,24 +171,28 @@ export default function SanPhamForm() {
                         const res = await api.post(`/admin/san-pham/${targetId}/anh`, fd)
                         if (res.data?.id) uploadedIdByUid[item.uid] = res.data.id
                         if (item.previewUrl) URL.revokeObjectURL(item.previewUrl)
+                        if (item.originalUrl && item.originalUrl !== item.previewUrl) URL.revokeObjectURL(item.originalUrl)
                     } catch (err) {
                         failed.push(item)
-                        message.error(err.response?.data?.message ?? 'Tải ảnh lên Cloud thất bại')
+                        imageError = err.response?.data?.message ?? 'Tải ảnh lên thất bại'
                     }
                 }
                 setPendingFiles(failed)
                 if (failed.length > 0) {
+                    if (imageError) message.error(imageError)
                     if (!isEdit) navigate(`/admin/san-pham/${targetId}`)
                     return
                 }
             }
 
-            // 3. Áp dụng ảnh chính nếu người dùng có đổi ảnh chính tạm trên FE
+            // 4. Áp dụng ảnh chính nếu người dùng có đổi ảnh chính tạm trên FE
             for (const chosenKey of Object.values(pendingPrimaries)) {
                 let realAnhId = null
                 if (chosenKey.startsWith('saved-')) {
                     const parsed = Number(chosenKey.slice('saved-'.length))
-                    if (!pendingDeletes.includes(parsed)) realAnhId = parsed
+                    if (!pendingDeletes.includes(parsed)) {
+                        realAnhId = replacedSavedIdMap[parsed] ?? parsed
+                    }
                 } else if (uploadedIdByUid[chosenKey]) {
                     realAnhId = uploadedIdByUid[chosenKey]
                 }
@@ -181,13 +206,12 @@ export default function SanPhamForm() {
             }
             setPendingPrimaries({})
 
-            if (isEdit) {
-                message.success('Cập nhật sản phẩm thành công')
-                navigate('/admin/san-pham')
+            if (imageError) {
+                message.warning(imageError)
             } else {
-                message.success('Đã tạo sản phẩm và lưu hình ảnh thành công')
-                navigate(`/admin/san-pham/${targetId}`)
+                message.success(isEdit ? 'Đã lưu thay đổi sản phẩm' : 'Đã thêm sản phẩm mới')
             }
+            navigate('/admin/san-pham')
         } catch (e) {
             message.error(e.response?.data?.message ?? 'Có lỗi xảy ra')
         } finally {
@@ -307,6 +331,8 @@ export default function SanPhamForm() {
                     setPendingDeletes={setPendingDeletes}
                     pendingPrimaries={pendingPrimaries}
                     setPendingPrimaries={setPendingPrimaries}
+                    pendingCrops={pendingCrops}
+                    setPendingCrops={setPendingCrops}
                 />
 
                 <div style={{ textAlign: 'right' }}>
