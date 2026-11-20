@@ -269,13 +269,10 @@ export default function QuayOffline() {
 
     const closePendingOrder = orderId => {
         if (pendingOrders.length === 1) {
-            const id = nextOrderNumber
+            const order = pendingOrders[0]
             const paymentState = createEmptyOrderPaymentState()
-            setPendingOrders([{
-                id, code: `HD${String(id).padStart(3, '0')}`, cart: [], paymentState,
-            }])
-            setNextOrderNumber(id + 1)
-            setActiveOrderId(id)
+            setPendingOrders([{ ...order, cart: [], paymentState }])
+            setActiveOrderId(order.id)
             setCart([])
             restorePaymentState(paymentState)
             return
@@ -452,17 +449,21 @@ export default function QuayOffline() {
                 total: data.tongTien,
             })
             setReceiptOpen(true)
-            const nextId = nextOrderNumber
-            const paymentState = createEmptyOrderPaymentState()
-            setPendingOrders(current => [
-                ...current.filter(order => order.id !== activeOrderId),
-                { id: nextId, code: `HD${String(nextId).padStart(3, '0')}`, cart: [], paymentState },
-            ])
-            setNextOrderNumber(nextId + 1)
-            setActiveOrderId(nextId)
-            setCart([])
+            if (pendingOrders.length === 1) {
+                const paymentState = createEmptyOrderPaymentState()
+                setPendingOrders(current => current.map(order =>
+                    order.id === activeOrderId ? { ...order, cart: [], paymentState } : order))
+                setCart([])
+                restorePaymentState(paymentState)
+            } else {
+                const remainingOrders = pendingOrders.filter(order => order.id !== activeOrderId)
+                setPendingOrders(remainingOrders)
+                const nextOrder = remainingOrders[0]
+                setActiveOrderId(nextOrder?.id ?? null)
+                setCart(nextOrder?.cart ?? [])
+                restorePaymentState(nextOrder?.paymentState || createEmptyOrderPaymentState())
+            }
             setProductPickerOpen(false)
-            restorePaymentState(paymentState)
             load()
         } catch (error) {
             message.error(error.response?.data?.message || 'Không thể thanh toán')
@@ -507,6 +508,7 @@ export default function QuayOffline() {
                         <strong>Giỏ hàng</strong>
                         <div className="pos-cart-toolbar">
                             <Button size="small" icon={<ShoppingOutlined />}
+                                    disabled={!activeOrderId}
                                     onClick={() => setProductPickerOpen(true)}>Thêm sản phẩm</Button>
                             {cart.length > 0 &&
                                 <Button size="small" danger icon={<DeleteOutlined />}
