@@ -54,7 +54,7 @@ public class ThuongHieuService {
     private void apply(ThuongHieu item, ThuongHieuRequest input) {
         item.setMaThuongHieu(input.maThuongHieu().trim());
         item.setTenThuongHieu(input.tenThuongHieu().trim());
-        item.setMoTa(input.moTa());
+        item.setMoTa(input.moTa() == null ? "" : input.moTa());
         item.setTrangThai(input.trangThai() == null ? true : input.trangThai());
     }
 

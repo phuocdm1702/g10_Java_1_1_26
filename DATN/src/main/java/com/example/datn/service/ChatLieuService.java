@@ -54,7 +54,7 @@ public class ChatLieuService {
     private void apply(ChatLieu item, ChatLieuRequest input) {
         item.setMaChatLieu(input.maChatLieu().trim());
         item.setTenChatLieu(input.tenChatLieu().trim());
-        item.setMoTa(input.moTa());
+        item.setMoTa(input.moTa() == null ? "" : input.moTa());
         item.setTrangThai(input.trangThai() == null ? true : input.trangThai());
     }
 

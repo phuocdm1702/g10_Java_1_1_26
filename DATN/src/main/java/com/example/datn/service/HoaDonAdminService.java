@@ -211,7 +211,7 @@ public class HoaDonAdminService {
         return toResponse(h, items);
     }
 
-    // Chuyển trạng thái hóa đơn sử dụng tryDeduct & hoanKho nguyên tử của SanPhamChiTietRepository
+        // Tồn kho đã trừ lúc đặt (COD). Đổi trạng thái không trừ thêm; hủy thì hoàn kho.
     @Transactional
     public HoaDonResponse updateStatus(Integer id, CapNhatTrangThaiHoaDonRequest req) {
         String moi = req.trangThaiMoi();
@@ -230,24 +230,8 @@ public class HoaDonAdminService {
 
         List<HoaDonChiTiet> items = hoaDonChiTietRepository.findByOrderIds(List.of(id));
 
-        // 1. Chuyển từ "Chờ xác nhận" -> "Đã xác nhận": Dùng tryDeduct nguyên tử
-        if (CHO_XAC_NHAN.equals(cu) && DA_XAC_NHAN.equals(moi)) {
-            for (HoaDonChiTiet item : items) {
-                SanPhamChiTiet spct = item.getSanPhamChiTiet();
-                int updated = sanPhamChiTietRepository.tryDeduct(spct.getId(), item.getSoLuong());
-                if (updated == 0) {
-                    // Rollback toàn bộ @Transactional nếu bất kỳ sản phẩm nào không đủ tồn kho
-                    throw new RuntimeException(
-                            "Sản phẩm '" + spct.getSanPham().getTenAo() + " (" + spct.getMaAoChiTiet() + ")' " +
-                                    "không đủ tồn kho hoặc đã ngừng bán! (Cần: " + item.getSoLuong() + ", Tồn: " + spct.getSoLuong() + ")"
-                    );
-                }
-            }
-        }
-
-        // 2. Chuyển sang "Đã hủy": Dùng hoanKho nguyên tử nếu đơn đã từng trừ kho
         if (DA_HUY.equals(moi)) {
-            if (DA_XAC_NHAN.equals(cu) || DANG_GIAO_HANG.equals(cu)) {
+            if (CHO_XAC_NHAN.equals(cu) || DA_XAC_NHAN.equals(cu) || DANG_GIAO_HANG.equals(cu)) {
                 for (HoaDonChiTiet item : items) {
                     sanPhamChiTietRepository.hoanKho(item.getSanPhamChiTiet().getId(), item.getSoLuong());
                 }
@@ -257,7 +241,7 @@ public class HoaDonAdminService {
             }
         }
 
-        // 3. Chuyển sang "Đã hoàn thành": Tự động đổi sang Đã thanh toán
+        // Đơn giao thành công: đánh dấu đã thanh toán nếu trước đó còn COD chưa thu
         if (DA_HOAN_THANH.equals(moi) && "Chưa thanh toán".equals(h.getTrangThaiThanhToan())) {
             h.setTrangThaiThanhToan("Đã thanh toán");
         }
@@ -299,7 +283,7 @@ public class HoaDonAdminService {
 
         List<HoaDonChiTiet> currentItems = hoaDonChiTietRepository.findByOrderIds(List.of(id));
 
-        // Cập nhật số lượng sản phẩm nếu có truyền lên
+        // Đơn COD đã trừ kho lúc đặt: chỉ trừ/hoàn phần chênh lệch khi đổi SL
         if (req.items() != null && !req.items().isEmpty()) {
             for (CapNhatThongTinHoaDonRequest.ItemUpdate itemReq : req.items()) {
                 if (itemReq.soLuongMoi() == null || itemReq.soLuongMoi() < 1) {
@@ -310,16 +294,25 @@ public class HoaDonAdminService {
                         .findFirst()
                         .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy dòng chi tiết ID: " + itemReq.idHoaDonChiTiet()));
 
-                if (detail.getSanPhamChiTiet().getSoLuong() < itemReq.soLuongMoi()) {
-                    throw new IllegalArgumentException("Sản phẩm " + detail.getSanPhamChiTiet().getMaAoChiTiet()
-                            + " chỉ còn tồn kho " + detail.getSanPhamChiTiet().getSoLuong());
+                int cu = detail.getSoLuong();
+                int moi = itemReq.soLuongMoi();
+                if (cu == moi) continue;
+
+                SanPhamChiTiet spct = detail.getSanPhamChiTiet();
+                int delta = moi - cu;
+                if (delta > 0) {
+                    if (sanPhamChiTietRepository.tryDeduct(spct.getId(), delta) == 0) {
+                        int ton = spct.getSoLuong() == null ? 0 : spct.getSoLuong();
+                        throw new IllegalArgumentException("Sản phẩm " + spct.getMaAoChiTiet()
+                                + " không đủ tồn kho để tăng số lượng (cần thêm " + delta
+                                + ", còn " + ton + ")");
+                    }
+                } else {
+                    sanPhamChiTietRepository.hoanKho(spct.getId(), -delta);
                 }
-                if (!detail.getSoLuong().equals(itemReq.soLuongMoi())) {
-                    logBuilder.append(String.format("SP %s: SL %d->%d; ",
-                            detail.getSanPhamChiTiet().getMaAoChiTiet(), detail.getSoLuong(), itemReq.soLuongMoi()));
-                    detail.setSoLuong(itemReq.soLuongMoi());
-                    hoaDonChiTietRepository.save(detail);
-                }
+                logBuilder.append(String.format("SP %s: SL %d->%d; ", spct.getMaAoChiTiet(), cu, moi));
+                detail.setSoLuong(moi);
+                hoaDonChiTietRepository.save(detail);
             }
         }
 

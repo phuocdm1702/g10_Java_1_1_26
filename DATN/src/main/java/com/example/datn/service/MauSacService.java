@@ -36,10 +36,13 @@ public class MauSacService {
     public void delete(Integer id) { repo.deleteById(id); }
 
     private void apply(MauSac m, MauSacRequest r) {
-        m.setMaMau(r.maMau());
-        m.setTenMau(r.tenMau());
-        m.setMaHex(r.maHex());
-        m.setMoTa(r.moTa());
+        m.setMaMau(r.maMau() == null ? "" : r.maMau().trim());
+        m.setTenMau(r.tenMau() == null ? "" : r.tenMau().trim());
+        String hex = r.maHex() == null ? "" : r.maHex().trim();
+        if (hex.isBlank()) hex = "#000000";
+        if (hex.length() > 20) hex = hex.substring(0, 20);
+        m.setMaHex(hex);
+        m.setMoTa(r.moTa() == null ? "" : r.moTa());
         m.setTrangThai(r.trangThai() != null ? r.trangThai() : true);
     }
 }
