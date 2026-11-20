@@ -58,7 +58,7 @@ export default function KichThuoc() {
     const showForm = (record = null) => {
         setEditing(record)
         form.resetFields()
-        form.setFieldsValue(record || { trangThai: true })
+        form.setFieldsValue(record || { trangThai: true, loaiKichThuoc: 'AO' })
         setOpen(true)
     }
     const submit = async () => {
@@ -77,7 +77,8 @@ export default function KichThuoc() {
     const columns = [
         { title: 'STT', width: 70, align: 'center', render: (_, __, i) => (page - 1) * pageSize + i + 1 },
         { title: 'Mã kích thước', dataIndex: 'maKichThuoc', width: 160 },
-        { title: 'Tên kích thước', dataIndex: 'tenKichThuoc', width: 220 },
+        { title: 'Tên kích thước', dataIndex: 'tenKichThuoc', width: 160 },
+        { title: 'Loại', dataIndex: 'loaiKichThuoc', width: 110, render: v => v === 'QUAN' ? 'Quần' : 'Áo' },
         { title: 'Mô tả', dataIndex: 'moTa', render: v => v || '—' },
         { title: 'Trạng thái', dataIndex: 'trangThai', width: 150,
             render: v => <span className={`ms-status ${v ? 'ms-status-on' : 'ms-status-off'}`}>{v ? 'Hoạt động' : 'Ngừng'}</span> },
@@ -113,9 +114,12 @@ export default function KichThuoc() {
                onOk={submit} confirmLoading={saving} okText="Lưu" cancelText="Hủy" destroyOnClose>
             <Form form={form} layout="vertical">
                 <Form.Item name="maKichThuoc" label="Mã kích thước" rules={[{ required:true, whitespace:true, message:'Vui lòng nhập mã kích thước' }]}>
-                    <Input maxLength={50} /></Form.Item>
+                    <Input maxLength={40} /></Form.Item>
                 <Form.Item name="tenKichThuoc" label="Tên kích thước" rules={[{ required:true, whitespace:true, message:'Vui lòng nhập tên kích thước' }]}>
-                    <Input maxLength={150} /></Form.Item>
+                    <Input maxLength={60} /></Form.Item>
+                <Form.Item name="loaiKichThuoc" label="Loại" rules={[{ required: true, message: 'Chọn loại kích thước' }]}>
+                    <Select options={[{ value: 'AO', label: 'Áo' }, { value: 'QUAN', label: 'Quần' }]} />
+                </Form.Item>
                 <Form.Item name="moTa" label="Mô tả"><Input.TextArea rows={3} maxLength={255} showCount /></Form.Item>
                 <Form.Item name="trangThai" label="Trạng thái"><Select options={[{ value:true, label:'Hoạt động' }, { value:false, label:'Ngừng' }]} /></Form.Item>
             </Form>

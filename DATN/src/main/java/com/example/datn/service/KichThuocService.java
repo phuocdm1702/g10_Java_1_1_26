@@ -27,6 +27,10 @@ public class KichThuocService {
         if (repository.existsByMaKichThuocIgnoreCase(input.maKichThuoc().trim())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Mã kích thước đã tồn tại");
         }
+        String loai = resolveLoai(input);
+        if (repository.existsByLoaiKickThuocIgnoreCaseAndTenKichThuocIgnoreCase(loai, input.tenKichThuoc().trim())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Tên kích thước đã tồn tại trong loại này");
+        }
         KichThuoc item = new KichThuoc();
         apply(item, input);
         return toResponse(repository.save(item));
@@ -40,6 +44,10 @@ public class KichThuocService {
         if (repository.existsByMaKichThuocIgnoreCaseAndIdNot(input.maKichThuoc().trim(), id)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Mã kích thước đã tồn tại");
         }
+        String loai = resolveLoai(input);
+        if (repository.existsByLoaiKickThuocIgnoreCaseAndTenKichThuocIgnoreCaseAndIdNot(loai, input.tenKichThuoc().trim(), id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Tên kích thước đã tồn tại trong loại này");
+        }
         apply(item, input);
         return toResponse(repository.save(item));
     }
@@ -52,17 +60,28 @@ public class KichThuocService {
     }
 
     private void apply(KichThuoc item, KichThuocRequest input) {
+        String ten = input.tenKichThuoc().trim();
+        if (ten.length() > 60) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Tên kích thước tối đa 60 ký tự");
+        }
         item.setMaKichThuoc(input.maKichThuoc().trim());
-        item.setTenKichThuoc(input.tenKichThuoc().trim());
-        item.setMoTa(input.moTa());
+        item.setTenKichThuoc(ten);
+        item.setLoaiKickThuoc(resolveLoai(input));
+        item.setMoTa(input.moTa() == null ? "" : input.moTa());
         item.setTrangThai(input.trangThai() == null ? true : input.trangThai());
     }
 
+    private static String resolveLoai(KichThuocRequest input) {
+        String loai = input.loaiKichThuoc() == null ? "" : input.loaiKichThuoc().trim().toUpperCase();
+        if (loai.equals("AO") || loai.equals("QUAN")) return loai;
+        String ma = input.maKichThuoc() == null ? "" : input.maKichThuoc().trim().toUpperCase();
+        return ma.startsWith("KTQ") ? "QUAN" : "AO";
+    }
 
     private KichThuocResponse toResponse(KichThuoc item) {
         return new KichThuocResponse(
                 item.getId(), item.getMaKichThuoc(), item.getTenKichThuoc(),
-                item.getMoTa(), item.getTrangThai()
+                item.getLoaiKickThuoc(), item.getMoTa(), item.getTrangThai()
         );
     }
 }

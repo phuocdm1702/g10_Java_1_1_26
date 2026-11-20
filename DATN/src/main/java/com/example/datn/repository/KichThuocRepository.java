@@ -6,4 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface KichThuocRepository extends JpaRepository<KichThuoc, Integer> {
     boolean existsByMaKichThuocIgnoreCase(String ma);
     boolean existsByMaKichThuocIgnoreCaseAndIdNot(String ma, Integer id);
+    boolean existsByLoaiKickThuocIgnoreCaseAndTenKichThuocIgnoreCase(String loai, String ten);
+    boolean existsByLoaiKickThuocIgnoreCaseAndTenKichThuocIgnoreCaseAndIdNot(String loai, String ten, Integer id);
 }

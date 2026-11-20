@@ -376,9 +376,9 @@ export default function HoaDon() {
                                         <Button
                                             type="primary"
                                             icon={<CheckOutlined />}
-                                            onClick={() => handleChangeStatus('Đã xác nhận', 'Xác nhận đơn & trừ kho')}
+                                            onClick={() => handleChangeStatus('Đã xác nhận', 'Xác nhận đơn')}
                                         >
-                                            Xác nhận đơn (Trừ tồn kho)
+                                            Xác nhận đơn
                                         </Button>
                                         <Button icon={<EditOutlined />} onClick={() => setEditMode(!editMode)}>
                                             {editMode ? 'Hủy sửa' : 'Sửa địa chỉ / Số lượng SP'}
@@ -555,7 +555,7 @@ export default function HoaDon() {
                                         editMode ? (
                                             <InputNumber
                                                 min={1}
-                                                max={r.tonKhoHienTai}
+                                                max={(r.tonKhoHienTai ?? 0) + (r.soLuong ?? 0)}
                                                 value={editedQuantities[r.id] ?? val}
                                                 onChange={(newVal) =>
                                                     setEditedQuantities({ ...editedQuantities, [r.id]: newVal || 1 })
