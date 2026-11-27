@@ -222,6 +222,9 @@ public class HoaDonAdminService {
         HoaDon h = hoaDonRepository.findDetailById(id)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy hóa đơn ID: " + id));
         String cu = h.getTrangThai();
+        if (DonHangService.dangChoVnpay(h)) {
+            throw new RuntimeException("Đơn đang chờ thanh toán VNPay, chưa thể đổi trạng thái");
+        }
 
         if (cu.equals(moi)) return getDetail(id);
         if (DA_HOAN_THANH.equals(cu) || DA_HUY.equals(cu)) {
