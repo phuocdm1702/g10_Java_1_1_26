@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, Navigate, useNavigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import api from '../../api/axios'
 import { useAuth } from '../../context/AuthContext'
 import { useCart } from '../../context/CartContext'
@@ -13,6 +13,7 @@ export default function ThanhToan() {
     const { user } = useAuth()
     const { items, canCheckout, clear, refresh } = useCart()
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
 
     const [form, setForm] = useState(EMPTY)
     const [addresses, setAddresses] = useState([])
@@ -21,8 +22,9 @@ export default function ThanhToan() {
     const [applied, setApplied] = useState('')
     const [codeMsg, setCodeMsg] = useState('')
     const [quote, setQuote] = useState(null)
-    const [error, setError] = useState('')
+    const [error, setError] = useState(searchParams.get('loi') ? 'Thanh toán VNPay không thành công hoặc đã hết hạn, vui lòng thử lại' : '')
     const [busy, setBusy] = useState(false)
+    const [pttt, setPttt] = useState('COD')
 
     const payload = items.map(i => ({ idBienThe: i.id, soLuong: i.soLuong }))
     const key = JSON.stringify(payload) + '|' + applied
@@ -92,10 +94,18 @@ export default function ThanhToan() {
 
         setBusy(true)
         try {
-            const { data } = await api.post('/user/dat-hang', {
+            const body = {
                 ...form, sdtNguoiNhan: phone, maGiamGia: applied || null,
-                phuongThuc: 'COD', luuDiaChi: saveAddr, items: payload,
-            })
+                phuongThuc: pttt, luuDiaChi: saveAddr, items: payload,
+            }
+            if (pttt === 'VNPAY') {
+                // Đơn đã được tạo ở trạng thái chờ thanh toán và giữ chỗ trong kho.
+                const { data } = await api.post('/user/dat-hang/vnpay', body)
+                clear()
+                window.location.href = data.paymentUrl
+                return
+            }
+            const { data } = await api.post('/user/dat-hang', body)
             clear()
             navigate(`/dat-hang-thanh-cong/${data.maHoaDon}`, { replace: true, state: { tongTien: data.tongTien } })
         } catch (err) {
@@ -152,8 +162,12 @@ export default function ThanhToan() {
                     </label>
 
                     <h2 className="sec">Phương thức thanh toán</h2>
-                    <div className="pay">Thanh toán khi nhận hàng (COD)</div>
-                    <p className="muted">Thanh toán trực tuyến sẽ được bổ sung sau.</p>
+                    <label className="check">
+                        <input type="radio" name="pttt" checked={pttt === 'COD'} onChange={() => setPttt('COD')} /> Thanh toán khi nhận hàng (COD)
+                    </label>
+                    <label className="check">
+                        <input type="radio" name="pttt" checked={pttt === 'VNPAY'} onChange={() => setPttt('VNPAY')} /> Thanh toán qua VNPay
+                    </label>
                 </div>
 
                 <aside className="summary">

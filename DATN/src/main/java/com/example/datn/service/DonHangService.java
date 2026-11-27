@@ -5,6 +5,7 @@ import com.example.datn.entity.*;
 import com.example.datn.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,6 +13,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.security.SecureRandom;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -21,6 +23,12 @@ import java.util.stream.Collectors;
 public class DonHangService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final String COD = "Thanh toán khi nhận hàng";
+    // Đơn VNPay chờ dùng trạng thái "Chưa thanh toán" vì cột này chỉ cho phép 3 giá trị. Nhận diện bằng dangChoVnpay().
+    private static final String CHO_TT = "Ch\u01B0a thanh to\u00e1n";
+    private static final String DA_TT = "Đã thanh toán";
+    private static final String DA_HUY = "Đã hủy";
+    private static final String CHO_XAC_NHAN = "Chờ xác nhận";
+    private static final int HAN_THANH_TOAN_PHUT = 15;
 
     private final SanPhamChiTietRepository ctRepo;
     private final GiamGiaRepository ggRepo;
@@ -48,6 +56,71 @@ public class DonHangService {
 
     @Transactional
     public DatHangResponse dat(Integer idKhach, DatHangRequest r) {
+        if (!"COD".equals(r.phuongThuc())) throw new RuntimeException("Đơn thanh toán VNPay phải đặt qua /dat-hang/vnpay");
+        return luuDon(idKhach, r, COD, "Chưa thanh toán", null, null, true);
+    }
+
+    // Đơn VNPay: lưu ở trạng thái chờ thanh toán và giữ chỗ (tồn khả dụng giảm), chưa trừ kho thật.
+    @Transactional
+    public DatHangResponse taoDonVnpay(Integer idKhach, DatHangRequest r) {
+        if (!"VNPAY".equals(r.phuongThuc())) throw new RuntimeException("Phương thức thanh toán không hợp lệ");
+        return luuDon(idKhach, r, "Thanh toán online", CHO_TT, "VNPAY", null, false);
+    }
+
+    // Gọi khi VNPay báo thành công. Trả về OK, DA_XU_LY, KHONG_TIM_THAY, SAI_TIEN hoặc HET_HAN.
+    @Transactional
+    public String xacNhanVnpay(String maHoaDon, String maGd, BigDecimal soTien) {
+        HoaDon hd = hdRepo.findByMaHoaDon(maHoaDon).orElse(null);
+        if (hd == null) return "KHONG_TIM_THAY";
+        if (DA_TT.equals(hd.getTrangThaiThanhToan())) return "DA_XU_LY";
+        if (!dangChoVnpay(hd)) return "HET_HAN";     // đã hủy vì quá hạn hoặc khách hủy
+        if (hd.getTongTien() == null || hd.getTongTien().compareTo(soTien) != 0) return "SAI_TIEN";
+
+        Integer id = hd.getId();
+        // Chốt trạng thái trước, rồi mới trừ kho. Nếu có lỗi, cả giao dịch bị hoàn lại.
+        if (hdRepo.doiTrangThaiThanhToan(id, CHO_TT, DA_TT) == 0) return "DA_XU_LY";
+        hdRepo.ganMaGiaoDich(id, maGd);
+        for (HoaDonChiTiet c : hdctRepo.findByOrderIds(List.of(id))) {
+            if (ctRepo.tryDeduct(c.getSanPhamChiTiet().getId(), c.getSoLuong()) == 0) {
+                throw new RuntimeException("Hết hàng sau khi khách đã thanh toán, cần hoàn tiền đơn " + maHoaDon);
+            }
+        }
+        return "OK";
+    }
+
+    // Khách hủy trên VNPay hoặc VNPay báo không thành công: hủy đơn đang chờ (chưa trừ kho nên không cộng kho)
+    @Transactional
+    public void huyDonVnpay(String maHoaDon) {
+        if (maHoaDon == null) return;
+        hdRepo.findByMaHoaDon(maHoaDon).ifPresent(this::huyDonChoThanhToan);
+    }
+
+    // Đơn VNPay đang chờ thanh toán (chưa bị hủy, chưa được xác nhận)
+    public static boolean dangChoVnpay(HoaDon h) {
+        return "VNPAY".equals(h.getPhuongThucThanhToanOnline())
+                && "Chưa thanh toán".equals(h.getTrangThaiThanhToan())
+                && CHO_XAC_NHAN.equals(h.getTrangThai());
+    }
+
+    // Quét mỗi phút: đơn chờ thanh toán quá 15 phút thì hủy để trả lại chỗ giữ
+    @Scheduled(fixedDelay = 60_000)
+    @Transactional
+    public void huyDonQuaHan() {
+        for (HoaDon h : hdRepo.findQuaHan(LocalDateTime.now().minusMinutes(HAN_THANH_TOAN_PHUT))) {
+            huyDonChoThanhToan(h);
+        }
+    }
+
+    private void huyDonChoThanhToan(HoaDon h) {
+        if (!dangChoVnpay(h)) return;
+        Integer id = h.getId();
+        Integer idMa = h.getGiamGia() == null ? null : h.getGiamGia().getId();   // đọc trước khi lệnh update làm sạch bộ nhớ
+        if (hdRepo.doiTrangThai(id, CHO_XAC_NHAN, DA_HUY) == 0) return;          // claim: chỉ hủy khi vẫn đang chờ
+        if (idMa != null) ggRepo.hoanLuot(idMa);
+    }
+
+    private DatHangResponse luuDon(Integer idKhach, DatHangRequest r, String pttt, String trangThaiTT,
+                                   String online, String maGiaoDich, boolean truKhoNgay) {
         KhachHang kh = khRepo.findById(idKhach)
                 .filter(k -> Boolean.TRUE.equals(k.getTrangThai()))
                 .orElseThrow(() -> new RuntimeException("Tài khoản không hợp lệ"));
@@ -56,7 +129,7 @@ public class DonHangService {
 
         // Trừ tồn kho theo thứ tự mã tăng dần (tránh khóa chéo giữa các đơn). Không đủ hàng thì cả đơn bị hủy.
         for (Dong d : t.dong()) {
-            if (ctRepo.tryDeduct(d.v().getId(), d.soLuong()) == 0) {
+            if (truKhoNgay && ctRepo.tryDeduct(d.v().getId(), d.soLuong()) == 0) {
                 throw new RuntimeException(ten(d.v()) + " vừa hết hàng, vui lòng kiểm tra lại giỏ hàng");
             }
         }
@@ -72,13 +145,15 @@ public class DonHangService {
         hd.setSdtNguoiNhan(r.sdtNguoiNhan().replaceAll("\\s+", ""));
         hd.setDiaChiGiaoHang(String.join(", ", r.duong().trim(), r.xaPhuong().trim(),
                 r.quanHuyen().trim(), r.tinhThanhPho().trim()));
-        hd.setPhuongThucThanhToan(COD);
-        hd.setTrangThaiThanhToan("Chưa thanh toán");
+        hd.setPhuongThucThanhToan(pttt);
+        hd.setTrangThaiThanhToan(trangThaiTT);
         hd.setTienTruocGiam(t.truoc());
         hd.setTienGiamGia(t.giam());
         hd.setPhiGiaoHang(t.ship());
         hd.setTongTien(t.tong());
         hd.setHinhThucMuaHang("Online");
+        hd.setPhuongThucThanhToanOnline(online);
+        hd.setMaGiaoDich(maGiaoDich);
         hd.setGhiChu(r.ghiChu() == null || r.ghiChu().isBlank() ? "" : r.ghiChu().trim());
         hd.setTrangThai("Chờ xác nhận");
         hdRepo.save(hd);
@@ -119,7 +194,7 @@ public class DonHangService {
                 throw new RuntimeException("Có sản phẩm trong giỏ hàng không còn được bán, vui lòng xóa khỏi giỏ");
             }
             if (e.getValue() > 99) throw new RuntimeException("Mỗi sản phẩm tối đa 99 cái");
-            int ton = v.getSoLuong() == null ? 0 : v.getSoLuong();
+            int ton = tonKhaDung(v);
             if (e.getValue() > ton) {
                 throw new RuntimeException(ten(v) + (ton == 0 ? " đã hết hàng" : " chỉ còn " + ton + " sản phẩm"));
             }
@@ -139,6 +214,12 @@ public class DonHangService {
         BigDecimal ship = truoc.compareTo(freeFrom) >= 0 ? BigDecimal.ZERO : shippingFee;
         BigDecimal tong = truoc.subtract(giam).add(ship);
         return new Tinh(dong, s2(truoc), s2(giam), s2(ship), s2(tong), gg);
+    }
+
+    // Tồn khả dụng = tồn thực trừ số lượng đang được giữ bởi đơn chờ thanh toán VNPay
+    private int tonKhaDung(SanPhamChiTiet v) {
+        int thuc = v.getSoLuong() == null ? 0 : v.getSoLuong();
+        return thuc - (int) hdctRepo.soLuongDangGiu(v.getId(), CHO_TT);
     }
 
     private void kiemTraMa(GiamGia g, BigDecimal truoc) {

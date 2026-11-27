@@ -22,6 +22,15 @@ public interface HoaDonChiTietRepository extends JpaRepository<HoaDonChiTiet, In
         """)
     List<HoaDonChiTiet> findByOrderIds(@Param("ids") Collection<Integer> ids);
 
+    // Số lượng đang được giữ bởi các đơn chờ thanh toán VNPay
+    @Query("""
+        select coalesce(sum(c.soLuong), 0) from HoaDonChiTiet c
+          join c.hoaDon h
+        where c.sanPhamChiTiet.id = :id and h.trangThaiThanhToan = :tt
+          and h.phuongThucThanhToanOnline = 'VNPAY' and h.trangThai = 'Chờ xác nhận'
+        """)
+    long soLuongDangGiu(@Param("id") Integer id, @Param("tt") String tt);
+
     // Tổng số lượng đã bán theo sản phẩm, không tính đơn đã hủy
     @Query("""
         select v.sanPham.id, sum(c.soLuong)

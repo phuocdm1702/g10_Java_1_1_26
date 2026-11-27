@@ -17,7 +17,7 @@ public record DatHangRequest(
         @Size(max = 255, message = "Ghi chú tối đa 255 ký tự") String ghiChu,
         @Size(max = 20, message = "Mã giảm giá không hợp lệ") String maGiamGia,
         @NotBlank(message = "Chọn phương thức thanh toán")
-        @Pattern(regexp = "COD", message = "Phương thức thanh toán chưa được hỗ trợ") String phuongThuc,
+        @Pattern(regexp = "COD|VNPAY", message = "Phương thức thanh toán chưa được hỗ trợ") String phuongThuc,
         Boolean luuDiaChi,
         @NotEmpty(message = "Giỏ hàng trống") @Size(max = 50, message = "Giỏ hàng quá lớn") @Valid List<CartItemRequest> items
 ) {}

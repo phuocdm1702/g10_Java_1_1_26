@@ -85,6 +85,9 @@ public class DonHangKhachService {
     @Transactional
     public void huy(Integer idKh, String ma) {
         HoaDon h = timDon(idKh, ma);
+        if (DonHangService.dangChoVnpay(h)) {
+            throw new RuntimeException("Đơn đang chờ thanh toán VNPay, không thể hủy. Đơn sẽ tự hủy sau 15 phút nếu chưa thanh toán.");
+        }
 
         // Đọc hết dữ liệu cần dùng TRƯỚC khi chạy lệnh cập nhật (lệnh đó làm sạch bộ nhớ đệm của Hibernate)
         Integer idDon = h.getId();

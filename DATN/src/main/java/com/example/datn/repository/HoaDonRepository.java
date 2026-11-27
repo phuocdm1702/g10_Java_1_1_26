@@ -16,6 +16,8 @@ import java.util.Optional;
 public interface HoaDonRepository extends JpaRepository<HoaDon, Integer> {
     boolean existsByMaHoaDon(String maHoaDon);
 
+    Optional<HoaDon> findFirstByMaGiaoDich(String maGiaoDich);
+
     Page<HoaDon> findByKhachHang_Id(Integer idKhachHang, Pageable pageable);
 
     Page<HoaDon> findByKhachHang_IdAndTrangThai(Integer idKhachHang, String trangThai, Pageable pageable);
@@ -26,6 +28,25 @@ public interface HoaDonRepository extends JpaRepository<HoaDon, Integer> {
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update HoaDon h set h.trangThai = :moi where h.id = :id and h.trangThai = :cu")
     int doiTrangThai(@Param("id") Integer id, @Param("cu") String cu, @Param("moi") String moi);
+
+    Optional<HoaDon> findByMaHoaDon(String maHoaDon);
+
+    // Chốt trạng thái thanh toán một lần duy nhất (IPN và return có thể đến cùng lúc)
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update HoaDon h set h.trangThaiThanhToan = :moi where h.id = :id and h.trangThaiThanhToan = :cu")
+    int doiTrangThaiThanhToan(@Param("id") Integer id, @Param("cu") String cu, @Param("moi") String moi);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("update HoaDon h set h.maGiaoDich = :ma where h.id = :id")
+    int ganMaGiaoDich(@Param("id") Integer id, @Param("ma") String ma);
+
+    // Đơn đang chờ thanh toán đã quá hạn
+    @Query("""
+        select h from HoaDon h left join fetch h.giamGia
+        where h.phuongThucThanhToanOnline = 'VNPAY' and h.trangThaiThanhToan = 'Chưa thanh toán'
+          and h.trangThai = 'Chờ xác nhận' and h.ngayTao < :truoc
+        """)
+    List<HoaDon> findQuaHan(@Param("truoc") LocalDateTime truoc);
 
     // Bộ lọc Quản lý Hóa đơn cho Admin
     // Tận dụng Index IX_HoaDon_NgayTao và IX_HoaDon_TrangThai
