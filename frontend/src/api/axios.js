@@ -1,7 +1,8 @@
 import axios from 'axios'
 import { adminSession, customerSession, getValid } from '../auth/session'
+import { API_ORIGIN } from '../config'
 
-const api = axios.create({ baseURL: 'http://localhost:8080/api' })
+const api = axios.create({ baseURL: `${API_ORIGIN}/api` })
 
 // /admin/** dùng token nhân viên, /user/** dùng token khách hàng, còn lại là công khai
 api.interceptors.request.use(config => {
@@ -9,6 +10,7 @@ api.interceptors.request.use(config => {
     const user = url.startsWith('/admin') ? getValid(adminSession)
         : url.startsWith('/user') ? getValid(customerSession) : null
     if (user) config.headers.Authorization = `Bearer ${user.token}`
+    if (/ngrok/i.test(API_ORIGIN)) config.headers['ngrok-skip-browser-warning'] = '1'
     return config
 })
 

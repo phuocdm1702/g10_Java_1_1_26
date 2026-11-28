@@ -1,0 +1,6 @@
+https://glittery-kataifi-a6f6ad.netlify.app/
+
+Đăng nhập demo: 0901000001 / 123456
+
+powershell -ExecutionPolicy Bypass -File .\scripts\start-tunnel-demo.ps1
+https://glittery-kataifi-a6f6ad.netlify.app/?api=https://xxxx.trycloudflare.com

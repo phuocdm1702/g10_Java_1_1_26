@@ -1,4 +1,4 @@
-export const API_ORIGIN = 'http://localhost:8080'
+export { API_ORIGIN } from '../config'
 
 // Bỏ qua đường dẫn ảnh giả (/images/products/...) trong file seed SQL; giữ nguyên link Cloud (https://...) hoặc ghép localhost cho /uploads/...
 export const imgUrl = u => {

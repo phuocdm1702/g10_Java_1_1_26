@@ -1,0 +1,13 @@
+[build]
+  base = "frontend"
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  VITE_STORE_ONLY = "true"
+  # Site Environment trên Netlify: VITE_API_ORIGIN=https://<backend-public> (không dấu / cuối)
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
