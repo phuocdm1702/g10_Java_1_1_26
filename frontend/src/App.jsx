@@ -19,6 +19,7 @@ import GioHang from './pages/user/GioHang'
 import ThanhToan from './pages/user/ThanhToan'
 import DatHangThanhCong from './pages/user/DatHangThanhCong'
 import { ACCESS } from './auth/roles'
+import { STORE_ONLY } from './config'
 import DanhSachSanPham from './pages/user/DanhSachSanPham'
 import TaiKhoanLayout from './pages/user/TaiKhoanLayout'
 import HoSo from './pages/user/HoSo'
@@ -59,25 +60,29 @@ export default function App() {
                 </Route>
             </Route>
 
-            {/* Admin */}
-            <Route path="/admin/login" element={<Login />} />
-            <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
-                <Route index element={<AdminHome />} />
-                <Route path="thong-ke" element={guard('/admin/thong-ke', <Dashboard />)} />
-                <Route path="ban-hang-offline" element={guard('/admin/ban-hang-offline', <QuayOffline />)} />
-                <Route path="hoa-don" element={guard('/admin/hoa-don', <HoaDon />)} />
-                <Route path="san-pham" element={guard('/admin/san-pham', <SanPham />)} />
-                <Route path="san-pham/them" element={guard('/admin/san-pham', <SanPhamForm />)} />
-                <Route path="san-pham/:id" element={guard('/admin/san-pham', <SanPhamForm />)} />
-                <Route path="mau-sac" element={guard('/admin/mau-sac', <MauSac />)} />
-                <Route path="kich-thuoc" element={guard('/admin/kich-thuoc', <KichThuoc />)} />
-                <Route path="chat-lieu" element={guard('/admin/chat-lieu', <ChatLieu />)} />
-                <Route path="thuong-hieu" element={guard('/admin/thuong-hieu', <ThuongHieu />)} />
-                <Route path="phieu-giam-gia" element={guard('/admin/phieu-giam-gia', <PhieuGiamGia />)} />
-                <Route path="dot-giam-gia" element={guard('/admin/dot-giam-gia', <DotGiamGia />)} />
-                <Route path="khach-hang" element={guard('/admin/khach-hang', <KhachHang />)} />
-                <Route path="nhan-vien" element={guard('/admin/nhan-vien', <NhanVien />)} />
-            </Route>
+            {/* Admin — ẩn trên bản Netlify storefront */}
+            {!STORE_ONLY && (
+                <>
+                    <Route path="/admin/login" element={<Login />} />
+                    <Route path="/admin" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
+                        <Route index element={<AdminHome />} />
+                        <Route path="thong-ke" element={guard('/admin/thong-ke', <Dashboard />)} />
+                        <Route path="ban-hang-offline" element={guard('/admin/ban-hang-offline', <QuayOffline />)} />
+                        <Route path="hoa-don" element={guard('/admin/hoa-don', <HoaDon />)} />
+                        <Route path="san-pham" element={guard('/admin/san-pham', <SanPham />)} />
+                        <Route path="san-pham/them" element={guard('/admin/san-pham', <SanPhamForm />)} />
+                        <Route path="san-pham/:id" element={guard('/admin/san-pham', <SanPhamForm />)} />
+                        <Route path="mau-sac" element={guard('/admin/mau-sac', <MauSac />)} />
+                        <Route path="kich-thuoc" element={guard('/admin/kich-thuoc', <KichThuoc />)} />
+                        <Route path="chat-lieu" element={guard('/admin/chat-lieu', <ChatLieu />)} />
+                        <Route path="thuong-hieu" element={guard('/admin/thuong-hieu', <ThuongHieu />)} />
+                        <Route path="phieu-giam-gia" element={guard('/admin/phieu-giam-gia', <PhieuGiamGia />)} />
+                        <Route path="dot-giam-gia" element={guard('/admin/dot-giam-gia', <DotGiamGia />)} />
+                        <Route path="khach-hang" element={guard('/admin/khach-hang', <KhachHang />)} />
+                        <Route path="nhan-vien" element={guard('/admin/nhan-vien', <NhanVien />)} />
+                    </Route>
+                </>
+            )}
 
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
